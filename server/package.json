@@ -1,0 +1,58 @@
+{
+  "name": "server",
+  "version": "1.0.0",
+  "description": "ATV Academy LMS backend (Student, Tutor, Admin)",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "nodemon index.js",
+    "db:migrate": "node scripts/migrate.js",
+    "db:setup": "node scripts/migrate.js",
+    "seed": "node scripts/seed.js",
+    "test": "node --test --test-concurrency=1 tests/*.test.js",
+    "create-admin": "node scripts/createAdmin.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.1144.0",
+    "@aws-sdk/lib-storage": "^3.1144.0",
+    "@aws-sdk/s3-request-presigner": "^3.1144.0",
+    "axios": "^1.20.0",
+    "bcryptjs": "^3.0.3",
+    "compression": "^1.8.2",
+    "cookie-parser": "^1.4.7",
+    "cors": "^2.8.6",
+    "dayjs": "^1.11.23",
+    "dotenv": "^18.0.4",
+    "eslint": "^10.11.0",
+    "express": "^5.2.1",
+    "express-rate-limit": "^8.7.0",
+    "express-validator": "^7.3.2",
+    "helmet": "^8.3.0",
+    "jest": "^30.5.2",
+    "jsonwebtoken": "^9.0.3",
+    "morgan": "^1.12.1",
+    "multer": "^2.4.0",
+    "mysql2": "^3.24.5",
+    "node-cron": "^4.6.0",
+    "nodemailer": "^10.0.13",
+    "pdfkit": "^0.20.2",
+    "prettier": "^3.9.9",
+    "razorpay": "^2.9.8",
+    "sequelize": "^6.37.8",
+    "socket.io": "^4.8.4",
+    "supertest": "^7.3.0",
+    "swagger-jsdoc": "^6.3.0",
+    "swagger-ui-express": "^5.0.1",
+    "uuid": "^14.0.2"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.11"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

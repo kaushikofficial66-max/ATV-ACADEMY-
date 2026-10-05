@@ -1,0 +1,43 @@
+# Dependencies
+node_modules/
+
+# Environment variables (secrets: DB, JWT, SMTP, Vimeo, Cloudflare R2, Razorpay, Zoom, WhatsApp)
+.env
+.env.*
+!.env.example
+
+# Local file storage (user uploads, certificates, project files, report exports).
+# The folders are recreated automatically by middlewares/upload.js.
+uploads/
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Test / coverage output
+coverage/
+.nyc_output/
+
+# Build / cache
+dist/
+build/
+.cache/
+tmp/
+temp/
+
+# Database dumps
+*.sql.gz
+*.dump
+
+# OS / editor files
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/
+.idea/
+*.swp
+*.swo
