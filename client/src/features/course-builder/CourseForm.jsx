@@ -10,7 +10,9 @@ import { EP, manage } from '@/lib/api/endpoints';
 import { Button, Card, Field, Input, Select, Textarea } from '@/components/ui';
 import { COURSE_LEVELS } from '@/config/constants';
 import { assetUrl, fullName, humanize } from '@/lib/utils';
+import { useStoreCommerce } from '@/features/commerce/useStoreCommerce';
 import { builderKeys } from './keys';
+import StoreProductPanel from './StoreProductPanel';
 
 /** Create (no `course`) or edit a course. Multipart because of the thumbnail. */
 export default function CourseForm({ role, course }) {
@@ -26,6 +28,9 @@ export default function CourseForm({ role, course }) {
     queryFn: () => get(EP.admin.tutors, { status: 'active', limit: 100 }).then((r) => r.data.tutors),
     enabled: isAdmin && !course
   });
+  const store = useStoreCommerce();
+  // Linked courses take their price from the WooCommerce product (synced back automatically).
+  const priceFromStore = store.enabled && Boolean(course?.woocommerce_product_id);
 
   const { register, handleSubmit, setError, formState } = useForm({
     defaultValues: {
@@ -38,6 +43,7 @@ export default function CourseForm({ role, course }) {
       level: course?.level || 'beginner',
       language: course?.language || 'English',
       duration_minutes: course?.duration_minutes ?? '',
+      woocommerce_product_id: course?.woocommerce_product_id ?? '',
       tutor_id: ''
     }
   });
@@ -47,13 +53,16 @@ export default function CourseForm({ role, course }) {
     const fd = new FormData();
     Object.entries(values).forEach(([k, v]) => {
       if (k === 'tutor_id' && (!isAdmin || course || !v)) return;
+      if (k === 'woocommerce_product_id' && !isAdmin) return;
+      if (priceFromStore && (k === 'price' || k === 'discount_price')) return;
       fd.append(k, v ?? '');
     });
     if (thumb) fd.append('thumbnail', thumb);
     try {
       const m = manage(role);
       const res = course ? await upload(m.course(course.id), fd, { method: 'put' }) : await upload(m.courses, fd);
-      toast.success(res.message);
+      if (res.data?.store_product?.action === 'error') toast.warning(res.message);
+      else toast.success(res.message);
       queryClient.invalidateQueries({ queryKey: builderKeys.all(role) });
       if (!course) router.push(`/${role}/courses/${res.data.course.id}/curriculum`);
     } catch (err) {
@@ -91,11 +100,22 @@ export default function CourseForm({ role, course }) {
             ))}
           </Select>
         </Field>
-        <Field label="Price (INR)" htmlFor="price" hint="0 for a free course" error={err('price')}>
-          <Input id="price" type="number" min="0" step="0.01" {...register('price')} />
+        <Field
+          label="Price (INR)"
+          htmlFor="price"
+          hint={
+            priceFromStore
+              ? 'Managed in WooCommerce - change it on the store product'
+              : store.enabled && !course
+                ? '0 for a free course. A paid course gets a draft product on the store.'
+                : '0 for a free course'
+          }
+          error={err('price')}
+        >
+          <Input id="price" type="number" min="0" step="0.01" readOnly={priceFromStore} className={priceFromStore ? 'bg-slate-50' : undefined} {...register('price')} />
         </Field>
-        <Field label="Discount price (INR)" htmlFor="discount_price" error={err('discount_price')}>
-          <Input id="discount_price" type="number" min="0" step="0.01" {...register('discount_price')} />
+        <Field label="Discount price (INR)" htmlFor="discount_price" hint={priceFromStore ? 'Store sale price' : undefined} error={err('discount_price')}>
+          <Input id="discount_price" type="number" min="0" step="0.01" readOnly={priceFromStore} className={priceFromStore ? 'bg-slate-50' : undefined} {...register('discount_price')} />
         </Field>
         <Field label="Language" htmlFor="language">
           <Input id="language" {...register('language')} />
@@ -103,6 +123,20 @@ export default function CourseForm({ role, course }) {
         <Field label="Duration (minutes)" htmlFor="duration_minutes">
           <Input id="duration_minutes" type="number" min="0" {...register('duration_minutes')} />
         </Field>
+        {isAdmin && (
+          <Field
+            label="WooCommerce product ID"
+            htmlFor="woocommerce_product_id"
+            hint={
+              store.enabled
+                ? 'Filled in automatically for paid courses. Enter an id only to link an existing store product.'
+                : 'Product sold on the store for this course. Paid orders for it enroll the buyer here.'
+            }
+            error={err('woocommerce_product_id')}
+          >
+            <Input id="woocommerce_product_id" type="number" min="1" step="1" inputMode="numeric" {...register('woocommerce_product_id')} />
+          </Field>
+        )}
         {isAdmin && !course && (
           <Field label="Primary tutor" htmlFor="tutor_id" hint="Optional - the tutor who will manage this course">
             <Select id="tutor_id" {...register('tutor_id')}>
@@ -136,6 +170,7 @@ export default function CourseForm({ role, course }) {
           </Button>
         </div>
       </form>
+      {isAdmin && course && store.enabled && <StoreProductPanel course={course} storeUrl={store.storeUrl} role={role} />}
     </Card>
   );
 }

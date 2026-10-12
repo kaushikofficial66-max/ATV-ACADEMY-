@@ -69,6 +69,12 @@ router.post('/orders/:orderId/refund', id, commerce.refundOrder);
 router.get('/payments', commerce.listPayments);
 router.get('/payments/:paymentId', id, commerce.getPayment);
 
+// WooCommerce store sync (store orders are read-only here; WooCommerce is the source of truth)
+router.post('/woocommerce/orders/:wcOrderId/sync', id, commerce.syncWooCommerceOrder);
+router.post('/woocommerce/reconcile', commerce.reconcileWooCommerce);
+router.post('/woocommerce/products/sync', commerce.syncCourseProducts);
+router.post('/courses/:courseId/woocommerce-product', id, commerce.createCourseProduct);
+
 // Coupons
 router.get('/coupons', commerce.listCoupons);
 router.post('/coupons', validate(v.couponCreate), commerce.createCoupon);
@@ -134,6 +140,7 @@ router.post('/settings/email/test', content.testEmailSettings);
 router.post('/settings/whatsapp/test', content.testWhatsAppSettings);
 router.post('/settings/zoom/test', content.testZoomSettings);
 router.post('/settings/storage/test', content.testStorageSettings);
+router.post('/settings/woocommerce/test', content.testWooCommerceSettings);
 
 // Course builder, recorded videos, quizzes, projects, certificates, live classes (any course)
 router.use(buildManagementRouter());

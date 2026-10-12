@@ -8,6 +8,7 @@ import { Button, Field, Input, PageHeader, Select, StatusBadge } from '@/compone
 import Modal from '@/components/ui/Modal';
 import ResourceList from '@/components/data/ResourceList';
 import { useApiMutation } from '@/hooks/useApiMutation';
+import { useStoreCommerce } from '@/features/commerce/useStoreCommerce';
 import { formatDate, formatPrice } from '@/lib/utils';
 
 const KEY = ['admin', 'coupons'];
@@ -17,13 +18,19 @@ export default function AdminCouponsPage() {
   const [editing, setEditing] = useState(null);
   const toggle = useApiMutation((c) => patch(EP.admin.couponStatus(c.id), { status: c.status === 'active' ? 'inactive' : 'active' }), { invalidate: [KEY] });
   const remove = useApiMutation((id) => del(EP.admin.coupon(id)), { invalidate: [KEY] });
+  const store = useStoreCommerce();
 
   return (
     <>
       <PageHeader
         title="Coupons"
+        description={
+          store.enabled
+            ? 'Legacy LMS coupons (history only). Purchases now use WooCommerce coupons - create and manage them in WooCommerce.'
+            : undefined
+        }
         actions={
-          <Button onClick={() => setEditing({})}>
+          !store.enabled && <Button onClick={() => setEditing({})}>
             <Plus className="size-4" aria-hidden /> New coupon
           </Button>
         }

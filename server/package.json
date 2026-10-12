@@ -10,7 +10,8 @@
     "db:setup": "node scripts/migrate.js",
     "seed": "node scripts/seed.js",
     "test": "node --test --test-concurrency=1 tests/*.test.js",
-    "create-admin": "node scripts/createAdmin.js"
+    "create-admin": "node scripts/createAdmin.js",
+    "vimeo:to-folder": "node scripts/moveVimeoToFolder.js"
   },
   "keywords": [],
   "author": "",

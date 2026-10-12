@@ -35,6 +35,7 @@ CREATE TABLE users (
  last_name VARCHAR(100),
  email VARCHAR(150) NOT NULL UNIQUE,
  phone VARCHAR(20) UNIQUE,
+ woocommerce_customer_id BIGINT UNSIGNED,
  password_hash VARCHAR(255) NOT NULL,
  profile_image VARCHAR(500),
  email_verified_at DATETIME,
@@ -43,7 +44,7 @@ CREATE TABLE users (
  last_login_at DATETIME,
  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
- INDEX idx_users_role_id(role_id), INDEX idx_users_status(status),
+ INDEX idx_users_role_id(role_id), INDEX idx_users_status(status), INDEX idx_users_woocommerce_customer(woocommerce_customer_id),
  CONSTRAINT fk_users_role FOREIGN KEY(role_id) REFERENCES roles(id) ON UPDATE CASCADE ON DELETE RESTRICT
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
@@ -93,7 +94,8 @@ CREATE TABLE courses (
  category_id BIGINT UNSIGNED NOT NULL, created_by BIGINT UNSIGNED NOT NULL,
  title VARCHAR(255) NOT NULL, slug VARCHAR(300) NOT NULL UNIQUE,
  short_description TEXT, description LONGTEXT, thumbnail_url VARCHAR(500),
- price DECIMAL(10,2) NOT NULL DEFAULT 0.00, discount_price DECIMAL(10,2),
+ price DECIMAL(10,2) NOT NULL DEFAULT 0.00, discount_price DECIMAL(10,2), woocommerce_product_id BIGINT UNSIGNED,
+ woocommerce_product_status VARCHAR(20), woocommerce_product_url VARCHAR(500), woocommerce_synced_at DATETIME, woocommerce_sync_error VARCHAR(255),
  duration_minutes INT UNSIGNED, level ENUM('beginner','intermediate','advanced','all') NOT NULL DEFAULT 'all',
  language VARCHAR(50) NOT NULL DEFAULT 'English',
  status ENUM('draft','pending','approved','published','rejected','archived') NOT NULL DEFAULT 'draft',
@@ -101,7 +103,7 @@ CREATE TABLE courses (
  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
  INDEX idx_courses_category(category_id), INDEX idx_courses_created_by(created_by),
- INDEX idx_courses_approved_by(approved_by), INDEX idx_courses_status(status),
+ INDEX idx_courses_approved_by(approved_by), INDEX idx_courses_status(status), UNIQUE KEY uq_courses_woocommerce_product(woocommerce_product_id),
  CONSTRAINT fk_courses_category FOREIGN KEY(category_id) REFERENCES categories(id) ON UPDATE CASCADE ON DELETE RESTRICT,
  CONSTRAINT fk_courses_created_by FOREIGN KEY(created_by) REFERENCES users(id) ON UPDATE CASCADE ON DELETE RESTRICT,
  CONSTRAINT fk_courses_approved_by FOREIGN KEY(approved_by) REFERENCES users(id) ON UPDATE CASCADE ON DELETE SET NULL
@@ -370,13 +372,17 @@ CREATE TABLE coupons (
 
 CREATE TABLE orders (
  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY, user_id BIGINT UNSIGNED NOT NULL,
- order_number VARCHAR(100) NOT NULL UNIQUE, subtotal DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+ order_number VARCHAR(100) NOT NULL UNIQUE,
+ source ENUM('lms','woocommerce','website') NOT NULL DEFAULT 'lms', woocommerce_order_id BIGINT UNSIGNED, external_order_id VARCHAR(64),
+ subtotal DECIMAL(10,2) NOT NULL DEFAULT 0.00,
  discount_amount DECIMAL(10,2) NOT NULL DEFAULT 0.00, tax_amount DECIMAL(10,2) NOT NULL DEFAULT 0.00,
- total_amount DECIMAL(10,2) NOT NULL DEFAULT 0.00, currency VARCHAR(10) NOT NULL DEFAULT 'INR', coupon_id BIGINT UNSIGNED,
+ total_amount DECIMAL(10,2) NOT NULL DEFAULT 0.00, currency VARCHAR(10) NOT NULL DEFAULT 'INR', coupon_id BIGINT UNSIGNED, coupon_codes VARCHAR(255),
  status ENUM('pending','paid','failed','cancelled','refunded') NOT NULL DEFAULT 'pending',
+ woocommerce_status VARCHAR(30), woocommerce_modified_at DATETIME, sync_note VARCHAR(500),
  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
  INDEX idx_orders_user(user_id), INDEX idx_orders_coupon(coupon_id), INDEX idx_orders_status(status),
+ INDEX idx_orders_source(source), UNIQUE KEY uq_orders_woocommerce_order(woocommerce_order_id), UNIQUE KEY uq_orders_external_order(external_order_id),
  CONSTRAINT fk_orders_user FOREIGN KEY(user_id) REFERENCES users(id) ON UPDATE CASCADE ON DELETE RESTRICT,
  CONSTRAINT fk_orders_coupon FOREIGN KEY(coupon_id) REFERENCES coupons(id) ON UPDATE CASCADE ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

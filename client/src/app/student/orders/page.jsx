@@ -48,15 +48,25 @@ export default function OrdersPage() {
             key: 'actions',
             header: '',
             render: (o) =>
-              ['pending', 'failed'].includes(o.status) && (
-                <div className="flex justify-end gap-2">
-                  <Button size="sm" onClick={() => retry(o)}>
-                    Pay now
-                  </Button>
-                  <Button size="sm" variant="ghost" onClick={() => cancel.mutate(o.id)}>
-                    Cancel
-                  </Button>
-                </div>
+              o.source === 'woocommerce' ? (
+                o.store_order_url && (
+                  <div className="flex justify-end">
+                    <Button size="sm" variant="ghost" href={o.store_order_url}>
+                      View on store
+                    </Button>
+                  </div>
+                )
+              ) : (
+                ['pending', 'failed'].includes(o.status) && (
+                  <div className="flex justify-end gap-2">
+                    <Button size="sm" onClick={() => retry(o)}>
+                      Pay now
+                    </Button>
+                    <Button size="sm" variant="ghost" onClick={() => cancel.mutate(o.id)}>
+                      Cancel
+                    </Button>
+                  </div>
+                )
               )
           }
         ]}

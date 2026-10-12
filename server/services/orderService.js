@@ -19,8 +19,25 @@ import { enrollUser } from './enrollmentService.js';
 import { getSetting } from './settingsService.js';
 import { createGatewayOrder } from './paymentService.js';
 import { notifyUser, notifyAdmins } from './notificationService.js';
+import { isWooCommerceEnabled, getStoreUrl } from './woocommerceService.js';
 
 const COURSE_CART_ATTRS = ['id', 'title', 'slug', 'thumbnail_url', 'price', 'discount_price', 'status', 'level'];
+
+/** 409 used when WooCommerce owns purchases: the LMS must not take payments or coupons. */
+export const storePurchaseError = async () => {
+  let where = 'our store';
+  try {
+    where = new URL(await getStoreUrl()).hostname.replace(/^www\./, '');
+  } catch {
+    // store URL not configured - keep the generic wording
+  }
+  return ApiError.conflict(`Courses are purchased on ${where}. Use the Buy button on the course page; access appears here automatically after payment.`);
+};
+
+/** Blocks LMS cart / coupon / payment actions while WooCommerce handles commerce. */
+export const assertLmsCheckoutAllowed = async () => {
+  if (await isWooCommerceEnabled()) throw await storePurchaseError();
+};
 
 export const getOrCreateActiveCart = async (userId, transaction = null) => {
   const [cart] = await Cart.findOrCreate({
@@ -137,6 +154,11 @@ export const getCartSummary = async (userId, couponCode = null) => {
  * Free orders are fulfilled immediately; paid orders get a Razorpay order.
  */
 export const createCheckoutOrder = async (user, { courseIds = null, couponCode = null }) => {
+  // With WooCommerce in charge only free enrollments go through the LMS.
+  const storeOwnsCommerce = await isWooCommerceEnabled();
+  if (storeOwnsCommerce && couponCode) throw await storePurchaseError();
+  const storeError = storeOwnsCommerce ? await storePurchaseError() : null;
+
   const order = await sequelize.transaction(async (transaction) => {
     let courses;
     let cart = null;
@@ -168,6 +190,7 @@ export const createCheckoutOrder = async (user, { courseIds = null, couponCode =
     }
 
     const pricing = await priceCourses(courses, couponCode, { transaction });
+    if (storeError && pricing.total > 0) throw storeError;
     const currency = await getSetting('currency');
 
     const created = await Order.create(
@@ -348,39 +371,114 @@ export const markPaymentFailed = async (payment, { reason = null, raw = null } =
 };
 
 /**
- * Marks an order refunded and cancels the enrollments it granted.
- * Called by the admin refund action and the refund.processed webhook.
+ * Cancels the active enrollments an order granted (optionally only some
+ * courses). Completed enrollments are kept, as for refunds. A course the
+ * student also holds through another paid order stays accessible, re-linked to
+ * that order. Returns the number of enrollments that lost access.
  */
-export const applyOrderRefund = async (orderId, { paymentId = null, refund = null } = {}) => {
+const cancelOrderEnrollments = async (order, { courseIds = null, transaction }) => {
+  const enrollments = await Enrollment.findAll({
+    where: {
+      order_id: order.id,
+      status: { [Op.in]: ['active', 'expired'] },
+      ...(courseIds && { course_id: { [Op.in]: courseIds } })
+    },
+    transaction
+  });
+  let revoked = 0;
+  for (const enrollment of enrollments) {
+    const other = await OrderItem.findOne({
+      where: { course_id: enrollment.course_id, order_id: { [Op.ne]: order.id } },
+      include: [{ model: Order, as: 'order', attributes: ['id'], where: { user_id: order.user_id, status: 'paid' } }],
+      transaction
+    });
+    if (other) {
+      await enrollment.update({ order_id: other.order_id }, { transaction });
+    } else {
+      await enrollment.update({ status: 'cancelled' }, { transaction });
+      revoked += 1;
+    }
+  }
+  return revoked;
+};
+
+/**
+ * Moves an order to refunded / cancelled / failed / pending and cancels the
+ * enrollments it granted. Nothing is deleted. Idempotent. Used by admin
+ * refunds, the Razorpay refund webhook and WooCommerce status sync.
+ */
+export const revokeOrderAccess = async (orderId, { status = 'refunded', paymentId = null, refund = null } = {}) => {
+  const result = { changed: false, previous_status: null, revoked: 0 };
   await sequelize.transaction(async (transaction) => {
     const order = await Order.findByPk(orderId, { transaction, lock: transaction.LOCK.UPDATE });
-    if (!order || order.status === 'refunded') return;
-    await order.update({ status: 'refunded' }, { transaction });
-    const paymentWhere = paymentId ? { id: paymentId } : { order_id: order.id, status: 'success' };
-    const payments = await Payment.findAll({ where: paymentWhere, transaction });
-    for (const p of payments) {
-      await p.update(
-        { status: 'refunded', ...(refund && { raw_response: { ...(p.raw_response || {}), refund } }) },
-        { transaction }
-      );
+    if (!order || order.status === status) return;
+    const wasPaid = order.status === 'paid';
+    Object.assign(result, { changed: true, previous_status: order.status });
+    await order.update({ status }, { transaction });
+
+    if (status === 'refunded') {
+      const paymentWhere = paymentId ? { id: paymentId } : { order_id: order.id, status: 'success' };
+      const payments = await Payment.findAll({ where: paymentWhere, transaction });
+      for (const p of payments) {
+        await p.update(
+          { status: 'refunded', ...(refund && { raw_response: { ...(p.raw_response || {}), refund } }) },
+          { transaction }
+        );
+      }
+    } else if (status !== 'pending') {
+      await Payment.update({ status: 'failed' }, { where: { order_id: order.id, status: { [Op.in]: ['created', 'pending'] } }, transaction });
     }
-    await Enrollment.update(
-      { status: 'cancelled' },
-      { where: { order_id: order.id, status: { [Op.in]: ['active', 'expired'] } }, transaction }
-    );
-    if (order.coupon_id) {
+
+    result.revoked = await cancelOrderEnrollments(order, { transaction });
+    if (order.coupon_id && (wasPaid || status === 'refunded')) {
       const removed = await CouponUsage.destroy({ where: { coupon_id: order.coupon_id, order_id: order.id }, transaction });
       if (removed) await Coupon.decrement('usage_count', { by: 1, where: { id: order.coupon_id, usage_count: { [Op.gt]: 0 } }, transaction });
     }
-    transaction.afterCommit(() =>
-      notifyUser(order.user_id, {
-        title: 'Order refunded',
-        message: `Order ${order.order_number} has been refunded. Access to the purchased courses has been removed.`,
-        type: 'order_refunded',
-        reference_type: 'order',
-        reference_id: order.id
-      })
-    );
+
+    if (status === 'refunded' || result.revoked) {
+      transaction.afterCommit(() =>
+        notifyUser(order.user_id, {
+          title: status === 'refunded' ? 'Order refunded' : 'Order updated',
+          message:
+            status === 'refunded'
+              ? `Order ${order.order_number} has been refunded. Access to the purchased courses has been removed.`
+              : `Order ${order.order_number} is now ${status === 'pending' ? 'on hold' : status}. Access to its courses has been removed until the order is paid.`,
+          type: status === 'refunded' ? 'order_refunded' : 'order_updated',
+          reference_type: 'order',
+          reference_id: order.id
+        })
+      );
+    }
+  });
+  return result;
+};
+
+/**
+ * Marks an order refunded and cancels the enrollments it granted.
+ * Called by the admin refund action and the refund.processed webhook.
+ */
+export const applyOrderRefund = async (orderId, { paymentId = null, refund = null } = {}) =>
+  revokeOrderAccess(orderId, { status: 'refunded', paymentId, refund });
+
+/** Revokes only some courses of a still-paid order (partial / line-item refund). */
+export const revokeOrderCourses = async (orderId, courseIds) => {
+  if (!courseIds.length) return 0;
+  return sequelize.transaction(async (transaction) => {
+    const order = await Order.findByPk(orderId, { transaction, lock: transaction.LOCK.UPDATE });
+    if (!order) return 0;
+    const revoked = await cancelOrderEnrollments(order, { courseIds, transaction });
+    if (revoked) {
+      transaction.afterCommit(() =>
+        notifyUser(order.user_id, {
+          title: 'Order partially refunded',
+          message: `Part of order ${order.order_number} was refunded. Access to the refunded course(s) has been removed.`,
+          type: 'order_refunded',
+          reference_type: 'order',
+          reference_id: order.id
+        })
+      );
+    }
+    return revoked;
   });
 };
 
@@ -404,5 +502,9 @@ export default {
   startGatewayPayment,
   fulfillOrder,
   markPaymentFailed,
+  revokeOrderAccess,
+  applyOrderRefund,
+  revokeOrderCourses,
+  assertLmsCheckoutAllowed,
   getOrderDetails
 };

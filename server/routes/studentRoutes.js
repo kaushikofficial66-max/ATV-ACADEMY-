@@ -87,6 +87,8 @@ router.get('/orders', studentOnly, commerce.listMyOrders);
 router.get('/orders/:orderId', studentOnly, validateIdParams, commerce.getMyOrder);
 router.post('/orders/:orderId/retry-payment', studentOnly, validateIdParams, commerce.retryPayment);
 router.post('/orders/:orderId/cancel', studentOnly, validateIdParams, commerce.cancelOrder);
+// Store (WooCommerce) purchase status, polled after returning from the store's thank-you page
+router.get('/purchases/woocommerce/:wcOrderId', studentOnly, validateIdParams, commerce.getStorePurchaseStatus);
 
 // Reviews
 router.get('/reviews', studentOnly, review.listMyReviews);

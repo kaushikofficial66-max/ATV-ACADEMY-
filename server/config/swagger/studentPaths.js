@@ -1319,7 +1319,22 @@ If the tutor rejects it, the student is notified and can upload a new version (p
         { name: 'orderId', in: 'path', required: true, schema: { type: 'integer' } }
       ],
       responses: {
-        200: { description: 'Order cancelled' }
+        200: { description: 'Order cancelled' },
+        400: { description: 'Store (WooCommerce) orders are cancelled on the store' }
+      }
+    }
+  },
+
+  '/student/purchases/woocommerce/{wcOrderId}': {
+    get: {
+      tags: ['10. Student - Wishlist, Cart & Orders'],
+      summary: 'Store Purchase Status',
+      description:
+        'Status of a WooCommerce order for the logged-in student, polled by /purchase-complete after the store thank-you page. Returns `processing` until the order has been verified with WooCommerce (webhook, or a throttled server-side REST pull). Never grants access by itself; other customers\' orders are reported as `processing`.',
+      security: [{ bearerAuth: [] }, { cookieAuth: [] }],
+      parameters: [{ name: 'wcOrderId', in: 'path', required: true, schema: { type: 'integer' }, description: 'WooCommerce order id' }],
+      responses: {
+        200: { description: '{ status: processing | pending | paid | failed | cancelled | refunded, order: { order_number, courses[] } | null }' }
       }
     }
   },

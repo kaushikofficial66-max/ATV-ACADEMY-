@@ -86,7 +86,7 @@ export function Card({ className, children, ...props }) {
 
 export function CardHeader({ title, description, action, className }) {
   return (
-    <div className={cn('flex items-start justify-between gap-4 border-b border-slate-100 px-5 py-4', className)}>
+    <div className={cn('flex items-start justify-between gap-3 border-b border-slate-100 px-4 py-3.5 sm:gap-4 sm:px-5 sm:py-4', className)}>
       <div>
         <h3 className="font-semibold text-slate-900">{title}</h3>
         {description && <p className="mt-0.5 text-sm text-slate-500">{description}</p>}
@@ -130,15 +130,15 @@ export function Avatar({ user, src, size = 36, className }) {
 
 export function StatCard({ label, value, icon: Icon, hint, href }) {
   const body = (
-    <Card className="flex items-center gap-4 p-5 transition hover:shadow-md">
+    <Card className="flex items-center gap-3 p-4 transition hover:shadow-md sm:gap-4 sm:p-5">
       {Icon && (
-        <span className="flex size-11 shrink-0 items-center justify-center rounded-lg bg-brand-50 text-brand-700">
+        <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-brand-50 text-brand-700 sm:size-11">
           <Icon className="size-5" aria-hidden />
         </span>
       )}
       <div className="min-w-0">
         <p className="text-sm text-slate-500">{label}</p>
-        <p className="truncate text-2xl font-semibold text-slate-900">{value}</p>
+        <p className="truncate text-xl font-semibold text-slate-900 sm:text-2xl">{value}</p>
         {hint && <p className="text-xs text-slate-500">{hint}</p>}
       </div>
     </Card>
@@ -219,12 +219,38 @@ export function Pagination({ meta, onPageChange }) {
 /** Title row at the top of a panel page. */
 export function PageHeader({ title, description, actions }) {
   return (
-    <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+    <div className="mb-4 flex flex-col gap-3 sm:mb-6 sm:flex-row sm:items-end sm:justify-between sm:gap-4">
       <div>
-        <h1 className="text-2xl font-semibold text-slate-900">{title}</h1>
+        <h1 className="text-xl font-semibold text-slate-900 sm:text-2xl">{title}</h1>
         {description && <p className="mt-1 text-sm text-slate-500">{description}</p>}
       </div>
       {actions && <div className="flex flex-wrap gap-2">{actions}</div>}
+    </div>
+  );
+}
+
+/** Circular progress (percentage in the middle), like the course-progress ring in the player. */
+export function ProgressRing({ value = 0, size = 56, stroke = 5, className, label = true }) {
+  const pct = Math.max(0, Math.min(100, Number(value) || 0));
+  const r = (size - stroke) / 2;
+  const c = 2 * Math.PI * r;
+  return (
+    <div className={cn('relative inline-flex shrink-0 items-center justify-center', className)} style={{ width: size, height: size }} role="progressbar" aria-valuenow={Math.round(pct)} aria-valuemin={0} aria-valuemax={100}>
+      <svg width={size} height={size} className="-rotate-90" aria-hidden>
+        <circle cx={size / 2} cy={size / 2} r={r} fill="none" strokeWidth={stroke} className="stroke-brand-100" />
+        <circle
+          cx={size / 2}
+          cy={size / 2}
+          r={r}
+          fill="none"
+          strokeWidth={stroke}
+          strokeLinecap="round"
+          strokeDasharray={c}
+          strokeDashoffset={c - (pct / 100) * c}
+          className="stroke-brand-600 transition-[stroke-dashoffset] duration-500"
+        />
+      </svg>
+      {label && <span className="absolute text-[11px] font-bold text-slate-800">{Math.round(pct)}%</span>}
     </div>
   );
 }

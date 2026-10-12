@@ -28,6 +28,22 @@ import {
   getTutorCourseIds
 } from '../../services/accessService.js';
 import { decorateCourses } from '../../services/courseService.js';
+import {
+  ensureProductForCourse,
+  syncCoursesFromStore,
+  isPriceManagedByStore,
+  onCourseArchived,
+  onCourseDeleted
+} from '../../services/woocommerceProductService.js';
+
+/** One-line outcome of the store-product step, appended to course save messages. */
+const STORE_MESSAGES = {
+  created: 'A draft product was created on the store - complete and publish it in WordPress.',
+  linked: 'Linked to the existing store product.',
+  synced: 'Price and status synced from the store.'
+};
+const storeMessage = (result) =>
+  result?.action === 'error' ? `Store product: ${result.error}` : STORE_MESSAGES[result?.action] || '';
 import { recordFile, removeStoredFile, sendStoredFile } from '../../services/storageService.js';
 import { publicUrlFor, storageKeyFor } from '../../middlewares/upload.js';
 import { storeVideoUpload, recordVideoFile, removeVideoAsset, syncVimeoVideo, getVideoPlayback, providerOf } from '../../services/videoService.js';
@@ -70,6 +86,22 @@ const normalizeCoursePayload = (body) => {
   return data;
 };
 
+/**
+ * WooCommerce product -> course mapping (admins only: it decides who gets
+ * enrolled by store purchases). Empty clears it. One product maps to one course.
+ */
+const readProductMapping = async (req, courseId = null) => {
+  if (!isAdmin(req.user) || req.body.woocommerce_product_id === undefined) return {};
+  const raw = String(req.body.woocommerce_product_id ?? '').trim();
+  if (raw === '' || raw === 'null') return { woocommerce_product_id: null };
+  if (!/^\d+$/.test(raw) || Number(raw) < 1) throw ApiError.badRequest('woocommerce_product_id must be a WooCommerce product id.');
+  const taken = await Course.findOne({ where: { woocommerce_product_id: raw }, attributes: ['id', 'title'] });
+  if (taken && Number(taken.id) !== Number(courseId)) {
+    throw ApiError.conflict(`WooCommerce product ${raw} is already linked to "${taken.title}".`);
+  }
+  return { woocommerce_product_id: raw };
+};
+
 const assertCategory = async (categoryId) => {
   if (categoryId === undefined) return;
   const category = await Category.findByPk(categoryId);
@@ -104,7 +136,7 @@ export const listMyCourses = async (req, res) => {
 
 /** POST /courses - create a course (multipart; optional `thumbnail`). */
 export const createCourse = async (req, res) => {
-  const data = normalizeCoursePayload(req.body);
+  const data = { ...normalizeCoursePayload(req.body), ...(await readProductMapping(req)) };
   await assertCategory(data.category_id);
 
   const admin = isAdmin(req.user);
@@ -136,7 +168,21 @@ export const createCourse = async (req, res) => {
     return created;
   });
 
-  return successResponse(res, { statusCode: 201, message: 'Course created successfully.', data: { course } });
+  // Paid courses get a draft WooCommerce product; an admin-entered product id is read back instead.
+  let store;
+  if (course.woocommerce_product_id) {
+    const sync = await syncCoursesFromStore({ courseIds: [course.id] });
+    store = sync.skipped ? null : { action: sync.synced ? 'synced' : 'error', error: 'Product not found on the store.' };
+  } else {
+    store = await ensureProductForCourse(course);
+  }
+  await course.reload();
+
+  return successResponse(res, {
+    statusCode: 201,
+    message: `Course created successfully. ${storeMessage(store)}`.trim(),
+    data: { course, store_product: store }
+  });
 };
 
 /** GET /courses/:courseId - full management view incl. curriculum, videos, resources. */
@@ -195,8 +241,21 @@ export const getCourseForManage = async (req, res) => {
 /** PUT /courses/:courseId */
 export const updateCourse = async (req, res) => {
   const course = await assertCourseManager(req.user, req.params.courseId);
-  const data = normalizeCoursePayload(req.body);
+  const data = { ...normalizeCoursePayload(req.body), ...(await readProductMapping(req, course.id)) };
   await assertCategory(data.category_id);
+
+  // Once linked to a store product, the price comes from WooCommerce only.
+  const mappingChanged = data.woocommerce_product_id !== undefined && String(data.woocommerce_product_id ?? '') !== String(course.woocommerce_product_id ?? '');
+  const linkedProductId = data.woocommerce_product_id !== undefined ? data.woocommerce_product_id : course.woocommerce_product_id;
+  let priceIgnored = false;
+  if (await isPriceManagedByStore({ woocommerce_product_id: linkedProductId })) {
+    priceIgnored = ['price', 'discount_price'].some((k) => data[k] !== undefined && String(data[k] ?? '') !== String(course[k] ?? ''));
+    delete data.price;
+    delete data.discount_price;
+  }
+  if (mappingChanged) {
+    Object.assign(data, { woocommerce_product_status: null, woocommerce_product_url: null, woocommerce_synced_at: null, woocommerce_sync_error: null });
+  }
 
   const finalPrice = data.price !== undefined ? data.price : course.price;
   const finalDiscount = data.discount_price !== undefined ? data.discount_price : course.discount_price;
@@ -215,7 +274,18 @@ export const updateCourse = async (req, res) => {
   await course.update(data);
   if ((req.file || data.thumbnail_url === null) && oldThumb) await removeStoredFile(oldThumb);
 
-  return successResponse(res, { message: 'Course updated successfully.', data: { course } });
+  // Newly linked product: read its price/status. Unlinked course that became paid: create its product.
+  let store = null;
+  if (mappingChanged && course.woocommerce_product_id) {
+    const sync = await syncCoursesFromStore({ courseIds: [course.id] });
+    if (!sync.skipped) store = sync.synced ? { action: 'synced' } : { action: 'error', error: 'Product not found on the store.' };
+  } else if (!mappingChanged && !course.woocommerce_product_id) {
+    store = await ensureProductForCourse(course);
+  }
+  await course.reload();
+
+  const notes = [storeMessage(store), priceIgnored ? 'Price was not changed: it is managed in WooCommerce for this course.' : ''].filter(Boolean);
+  return successResponse(res, { message: ['Course updated successfully.', ...notes].join(' '), data: { course, store_product: store } });
 };
 
 /**
@@ -238,7 +308,9 @@ export const deleteCourse = async (req, res) => {
 
   const videos = await RecordedVideo.findAll({ where: { course_id: course.id }, attributes: ['id', 'storage_key', 'vimeo_video_id'] });
   const resources = await CourseResource.findAll({ where: { course_id: course.id }, attributes: ['file_url'] });
+  const snapshot = { id: course.id, title: course.title, woocommerce_product_id: course.woocommerce_product_id };
   await course.destroy();
+  await onCourseDeleted(snapshot);
   for (const v of videos) await removeVideoAsset(v);
   for (const r of resources) await removeStoredFile(r.file_url);
   if (course.thumbnail_url) await removeStoredFile(course.thumbnail_url);
@@ -283,7 +355,10 @@ export const changeCourseStatus = async (req, res) => {
     ...(isAdmin(req.user) && ['approved', 'published', 'rejected'].includes(status) && { approved_by: req.user.id, approved_at: new Date() }),
     ...(isAdmin(req.user) && req.body.approval_note !== undefined && { approval_note: req.body.approval_note })
   });
-  return successResponse(res, { message: `Course status changed to ${status}.`, data: { course } });
+  // An archived course can no longer be delivered to new buyers: stop selling it on the store.
+  const store = status === 'archived' ? await onCourseArchived(course) : null;
+  const note = store?.action === 'unpublished' ? ' Its store product was set to draft.' : store?.action === 'error' ? ` Store product: ${store.error}` : '';
+  return successResponse(res, { message: `Course status changed to ${status}.${note}`, data: { course } });
 };
 
 // ==========================================================================

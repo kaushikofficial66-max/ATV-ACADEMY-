@@ -3,15 +3,15 @@
 import { use } from 'react';
 import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
-import { Award, Download, HelpCircle, PlayCircle } from 'lucide-react';
+import { Award, ChevronLeft, Download, HelpCircle, PlayCircle } from 'lucide-react';
 import { get, downloadFile } from '@/lib/api/client';
 import { EP } from '@/lib/api/endpoints';
-import { Badge, Button, Card, CardHeader, PageHeader, StatusBadge } from '@/components/ui';
+import { Badge, Button, Card, CardHeader, ProgressRing, StatusBadge } from '@/components/ui';
 import { QueryState } from '@/components/feedback/States';
 import { Loader } from '@/components/feedback/Loader';
 import { learningKeys } from '@/features/learning/keys';
 import ProgressSummary from '@/features/learning/ProgressSummary';
-import CurriculumNav from '@/features/learning/CurriculumNav';
+import ModuleList from '@/features/learning/ModuleList';
 import ProjectSubmitCard from '@/features/projects/ProjectSubmitCard';
 
 export default function CourseLearnPage({ params }) {
@@ -23,33 +23,56 @@ export default function CourseLearnPage({ params }) {
       {(d) => {
         const first = d.curriculum[0]?.lectures[0];
         const resumeId = d.resume_lecture?.id || first?.id;
+        const pct = Number(d.progress?.completion_percentage || 0);
         return (
-          <>
-            <PageHeader
-              title={d.course.title}
-              description={d.is_staff_preview ? 'Staff preview - progress is not tracked' : undefined}
-              actions={
-                resumeId && (
-                  <Button href={`/student/learn/${courseId}/lecture/${resumeId}`}>
-                    <PlayCircle className="size-4" aria-hidden /> {d.progress?.completion_percentage > 0 ? 'Continue learning' : 'Start course'}
-                  </Button>
-                )
-              }
-            />
+          <div className="space-y-4 sm:space-y-6">
+            <Link href="/student/courses" className="inline-flex items-center gap-1 text-sm font-medium text-slate-500 hover:text-slate-800">
+              <ChevronLeft className="size-4" aria-hidden /> My courses
+            </Link>
+
+            {/* Course header */}
+            <section className="flex flex-col gap-4 rounded-2xl bg-gradient-to-br from-brand-800 via-brand-700 to-brand-500 p-5 text-white shadow-lg shadow-brand-900/10 sm:flex-row sm:items-center sm:justify-between sm:gap-5 sm:rounded-3xl sm:p-8">
+              <div className="min-w-0">
+                <h1 className="text-xl font-bold leading-tight tracking-tight sm:text-3xl">{d.course.title}</h1>
+                <p className="mt-2 text-sm text-brand-100">
+                  {d.is_staff_preview ? 'Staff preview - progress is not tracked' : d.progress?.total_lectures ? `${d.progress.completed_lectures} of ${d.progress.total_lectures} lectures completed` : 'Welcome to your course'}
+                </p>
+                {resumeId && (
+                  <Link
+                    href={`/student/learn/${courseId}/lecture/${resumeId}`}
+                    className="mt-4 inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-white px-6 text-sm font-semibold text-brand-800 shadow-lg shadow-black/10 transition hover:bg-brand-50 sm:mt-5 sm:h-12 sm:w-auto"
+                  >
+                    <PlayCircle className="size-5" aria-hidden /> {pct > 0 ? 'Continue learning' : 'Start course'}
+                  </Link>
+                )}
+              </div>
+              {d.progress && (
+                <div className="flex items-center gap-4 rounded-2xl bg-white/10 p-4 ring-1 ring-white/20">
+                  <ProgressRing value={pct} size={84} stroke={8} className="[&_circle:first-child]:stroke-white/20 [&_circle:last-child]:stroke-white [&_span]:text-white" />
+                  <div>
+                    <p className="text-xs font-medium uppercase tracking-wide text-brand-100">Your progress</p>
+                    <div className="mt-1">
+                      <StatusBadge status={d.progress.status} label={d.progress.status_label} />
+                    </div>
+                  </div>
+                </div>
+              )}
+            </section>
+
             <div className="grid gap-6 lg:grid-cols-3">
               <div className="space-y-6 lg:col-span-2">
-                <Card>
-                  <CardHeader title="Course content" />
-                  <CurriculumNav courseId={courseId} curriculum={d.curriculum} />
+                <Card className="overflow-hidden">
+                  <CardHeader title="Course content" description={`${d.curriculum.length} module${d.curriculum.length === 1 ? '' : 's'}`} />
+                  <ModuleList courseId={courseId} curriculum={d.curriculum} />
                 </Card>
                 {d.quizzes.length > 0 && (
                   <Card>
                     <CardHeader title="Quizzes" />
                     <ul className="divide-y divide-slate-100">
                       {d.quizzes.map((q) => (
-                        <li key={q.id} className="flex items-center gap-3 px-5 py-3 text-sm">
+                        <li key={q.id} className="flex items-center gap-3 px-5 py-3.5 text-sm">
                           <HelpCircle className="size-4 text-slate-400" aria-hidden />
-                          <span className="flex-1">{q.title}</span>
+                          <span className="flex-1 font-medium text-slate-800">{q.title}</span>
                           {q.passed ? <Badge tone="green">Passed</Badge> : q.best_percentage !== null ? <Badge tone="amber">Best {q.best_percentage}%</Badge> : null}
                           <Button href={`/student/quizzes/${q.id}`} size="sm" variant="secondary">
                             {q.attempts_used ? 'Retake' : 'Start'}
@@ -66,9 +89,11 @@ export default function CourseLearnPage({ params }) {
                 {d.certificate && (
                   <Card className="p-5">
                     <div className="flex items-center gap-3">
-                      <Award className="size-6 text-brand-700" aria-hidden />
+                      <span className="flex size-11 items-center justify-center rounded-xl bg-brand-50 text-brand-700">
+                        <Award className="size-6" aria-hidden />
+                      </span>
                       <div className="flex-1">
-                        <p className="font-medium text-slate-900">Certificate</p>
+                        <p className="font-semibold text-slate-900">Certificate</p>
                         <StatusBadge status={d.certificate.status} />
                       </div>
                       {['approved', 'issued'].includes(d.certificate.status) && (
@@ -79,14 +104,9 @@ export default function CourseLearnPage({ params }) {
                     </div>
                   </Card>
                 )}
-                {d.progress?.status === 'completed' && (
-                  <p className="text-center text-sm text-slate-500">
-                    Enjoyed the course? <Link href="/student/reviews" className="text-brand-700 hover:underline">Leave a review</Link>
-                  </p>
-                )}
               </div>
             </div>
-          </>
+          </div>
         );
       }}
     </QueryState>

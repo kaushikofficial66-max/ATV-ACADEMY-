@@ -43,6 +43,28 @@ export const SETTING_DEFINITIONS = {
   razorpay_webhook_secret: { group: 'payment', env: 'RAZORPAY_WEBHOOK_SECRET', default: '', secret: true },
   tax_percent: { group: 'payment', default: '0', type: 'number', public: true },
 
+  // WooCommerce (antarikshtv.com) - the commerce source of truth. When enabled, paid
+  // courses are bought on the store; its order webhook enrolls students here.
+  woocommerce_enabled: { group: 'woocommerce', env: 'WOOCOMMERCE_ENABLED', default: 'false', type: 'boolean', public: true },
+  woocommerce_url: { group: 'woocommerce', env: 'WOOCOMMERCE_URL', default: '', public: true },
+  // REST API keys (WooCommerce > Settings > Advanced > REST API). Permission "Read/Write" to
+  // create draft products for new courses; "Read" is enough for order reconciliation,
+  // partial refunds, "Resync" and price sync. Order webhooks work without them.
+  woocommerce_consumer_key: { group: 'woocommerce', env: 'WOOCOMMERCE_CONSUMER_KEY', default: '', secret: true },
+  woocommerce_consumer_secret: { group: 'woocommerce', env: 'WOOCOMMERCE_CONSUMER_SECRET', default: '', secret: true },
+  // Secret entered on each WooCommerce webhook (signs X-WC-Webhook-Signature).
+  woocommerce_webhook_secret: { group: 'woocommerce', env: 'WOOCOMMERCE_WEBHOOK_SECRET', default: '', secret: true },
+  // Shared secret for POST /webhooks/atv-site (paid orders pushed by the antarikshtv.com checkout).
+  atv_site_webhook_secret: { group: 'woocommerce', env: 'ATV_SITE_WEBHOOK_SECRET', default: '', secret: true },
+  // Order statuses that grant course access (comma-separated).
+  woocommerce_paid_statuses: { group: 'woocommerce', env: 'WOOCOMMERCE_PAID_STATUSES', default: 'processing,completed' },
+  // Where "Buy" sends students. Placeholders: {store_url}, {product_id}.
+  woocommerce_buy_url_template: { group: 'woocommerce', default: '{store_url}/checkout/?add-to-cart={product_id}' },
+  // Periodically pulls recently modified orders via the REST API (catches missed webhooks).
+  woocommerce_reconcile_enabled: { group: 'woocommerce', default: 'true', type: 'boolean' },
+  // Creating a paid course creates a draft WooCommerce product (needs Read/Write keys).
+  woocommerce_auto_create_products: { group: 'woocommerce', env: 'WOOCOMMERCE_AUTO_CREATE_PRODUCTS', default: 'true', type: 'boolean' },
+
   // Email
   mail_host: { group: 'email', env: 'MAIL_HOST', default: '' },
   mail_port: { group: 'email', env: 'MAIL_PORT', default: '587', type: 'number' },
@@ -90,7 +112,7 @@ export const SETTING_DEFINITIONS = {
   cloudflare_r2_public_url: { group: 'storage', env: 'CLOUDFLARE_R2_PUBLIC_URL', default: '' }
 };
 
-export const SETTING_GROUPS = ['general', 'payment', 'email', 'whatsapp', 'zoom', 'storage'];
+export const SETTING_GROUPS = ['general', 'payment', 'woocommerce', 'email', 'whatsapp', 'zoom', 'storage'];
 
 const CACHE_TTL_MS = 60 * 1000;
 let cache = null;

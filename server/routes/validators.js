@@ -55,7 +55,8 @@ export const v = {
     money('discount_price'),
     body('level').optional().isIn(['beginner', 'intermediate', 'advanced', 'all']),
     body('duration_minutes').optional({ values: 'falsy' }).isInt({ min: 0 }),
-    body('language').optional().isLength({ max: 50 })
+    body('language').optional().isLength({ max: 50 }),
+    optionalId('woocommerce_product_id')
   ],
   courseUpdate: [
     body('title').optional().trim().notEmpty().isLength({ max: 255 }),
@@ -63,7 +64,8 @@ export const v = {
     money('price'),
     money('discount_price'),
     body('level').optional().isIn(['beginner', 'intermediate', 'advanced', 'all']),
-    body('duration_minutes').optional({ values: 'falsy' }).isInt({ min: 0 })
+    body('duration_minutes').optional({ values: 'falsy' }).isInt({ min: 0 }),
+    optionalId('woocommerce_product_id')
   ],
   courseStatus: [body('status').isIn(['draft', 'pending', 'approved', 'published', 'rejected', 'archived']).withMessage('Invalid status.')],
   section: [body('title').trim().notEmpty().withMessage('Section title is required.').isLength({ max: 255 }), body('status').optional().isIn(['active', 'inactive'])],

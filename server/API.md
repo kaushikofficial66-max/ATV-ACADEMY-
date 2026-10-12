@@ -18,7 +18,33 @@ npm run dev                 # nodemon; `npm start` for production
 DB_NAME=lms_db_test npm test   # end-to-end tests (wipes the *_test database)
 ```
 
-Integrations (SMTP, Razorpay, Zoom, WhatsApp) can be configured in `.env` or in **Admin › Settings** (DB values win). Secrets are never returned unmasked.
+Integrations (SMTP, WooCommerce, Razorpay, Zoom, WhatsApp) can be configured in `.env` or in **Admin › Settings** (DB values win). Secrets are never returned unmasked.
+
+## WooCommerce (antarikshtv.com) – commerce source of truth
+
+The WordPress/WooCommerce store owns customers, products, checkout, payments, coupons, refunds, revenue reports and Meta Pixel tracking. The LMS owns learning and only **mirrors** what it needs. The two databases never talk directly: the store calls this API (signed webhooks) and the API may read the store's REST API.
+
+```
+Store checkout → payment → WooCommerce order ──signed webhook──▶ POST /api/v1/webhooks/woocommerce
+   → verify signature/source/payload → find-or-create student by billing email
+   → mirror order (orders.source='woocommerce', unique woocommerce_order_id) + payment reference
+   → paid status? enrollUser() for each mapped course : revoke access granted by the order
+```
+
+| Item | Behaviour |
+|---|---|
+| Setup | Admin › Settings › Woocommerce (or `WOOCOMMERCE_*` env): enable, store URL, webhook secret, REST keys (Read/Write). Create webhooks for **Order created / updated / deleted / restored** and **Product updated / deleted**, API v3, delivery URL `https://<api-host>/api/v1/webhooks/woocommerce`. |
+| Product → course | `courses.woocommerce_product_id` (unique). Variation ids are matched too. Titles are never used. Unmapped products (merchandise etc.) are ignored and noted on the order. |
+| Course → product (creation) | Creating (or saving) a **paid** course with no product creates a **draft** WooCommerce product (title, price, sale price, descriptions, thumbnail, virtual, SKU `atv-course-<id>`) and links it. Admins then complete and publish it in WordPress. Free courses get no product. Store outages never block saving: the error is shown on the course and **Create store product** retries; the SKU prevents duplicates. Needs Read/Write REST keys and `woocommerce_auto_create_products` (default on). An existing product can be linked by entering its id instead. |
+| Product → course (sync) | After linking WooCommerce owns the product: price, sale price, publish status and product URL are read back by the **Product updated / deleted** webhooks, an hourly job and **Sync now**. LMS price edits on a linked course are ignored; the LMS never overwrites product content. The Buy link only appears while the product is published. Archiving a course sets its product to draft; deleting a course (only possible without sales) trashes the product the LMS created. |
+| Customers | Matched by normalised (trimmed, lower-case) billing email; new customers get a student account and a 7-day "set your password" link. Only name, email, phone and the WooCommerce customer id are stored. |
+| Statuses | `processing`, `completed` (setting `woocommerce_paid_statuses`) → access. `pending`, `on-hold`, `failed`, `cancelled`, `refunded`, deleted → no access; a previously paid order's enrollments are set to `cancelled` (rows kept). Unpaid orders are not mirrored until paid (no accounts for abandoned checkouts). |
+| Refunds | Full refund → order `refunded`, access revoked. Partial refund (order stays `completed`) → with REST keys, courses whose line item was fully refunded are revoked; without keys the order is flagged (`sync_note`). A course also bought in another paid order stays accessible. |
+| Coupons | Applied and validated by WooCommerce only; the LMS stores the final totals and `orders.coupon_codes`. LMS coupons/cart/checkout are closed while WooCommerce is enabled (free courses still enroll in the LMS). |
+| Idempotency | Unique `orders.woocommerce_order_id`, unique enrollment `user_id + course_id`, row-locked fulfilment, concurrent-delivery retry; payloads older than the stored `date_modified_gmt` are ignored. |
+| Missed webhooks | WooCommerce does not retry failed deliveries. With REST keys the scheduler re-syncs recently modified orders every 10 min; admins can **Resync** one order or **Sync recent store orders**. |
+| Return page | Point the store's thank-you page to `https://learn.antarikshtv.com/purchase-complete?order={order_id}` (a button/link after the Purchase pixel has fired). The page shows "Your payment is being verified" and polls `GET /student/purchases/woocommerce/:id`; access is only granted from WooCommerce data (webhook or REST pull), never because the page was opened. |
+| Reports | Store orders count as paid orders in LMS revenue, tutor earnings and dashboards (mirrored totals); financial reporting of record stays in WooCommerce. |
 
 Real-time notifications: connect `socket.io` to the API host with `{ auth: { token } }`, listen for `notification`.
 
@@ -26,7 +52,7 @@ Real-time notifications: connect `socket.io` to the API host with `{ auth: { tok
 
 | Flow | Rule |
 |---|---|
-| Purchase | Cart → coupon → checkout → Razorpay → signature-verified `/payments/verify` (and webhook) → enrollment. Free/100%-coupon orders enroll immediately. |
+| Purchase | **WooCommerce enabled (production):** store checkout → signed order webhook → enrollment (see the WooCommerce section). **Legacy (WooCommerce disabled):** Cart → coupon → checkout → Razorpay → signature-verified `/payments/verify` (and webhook) → enrollment. Free/100%-coupon orders enroll immediately. |
 | Recorded videos | Only `uploads/images` is public. Videos stream from `/media/videos/:id/stream?token=` – a 4-hour token issued only to enrolled students, the course's tutors, or admins. Range requests supported. |
 | 90% completion rule – phase 1 (0→90%) | Each recorded-video play (`POST /student/lectures/:id/play` or `/student/videos/:id/play`) or live-class join adds `progress_increment_percent` (default 10%), capped at `progress_auto_cap_percent` (90%) – never higher. Repeat plays/joins of the same item within `progress_activity_cooldown_minutes` (default 10; 0 = every click) count once. Every counted click is stored in `progress_activities`. Watch time (`/progress`) only saves the resume position and lecture checkmarks. |
 | Phase 2 (90% → Pending Approval) | At 90% the final project unlocks (`progress.status = project_unlocked`). After submission the course shows **Pending Approval** (still 90%) and the submission appears on the tutor and admin dashboards (`pending_project_approvals`). |
@@ -85,7 +111,8 @@ Real-time notifications: connect `socket.io` to the API host with `{ auth: { tok
 | Wishlist | `GET /student/wishlist`, `POST /student/wishlist {course_id}`, `DELETE /student/wishlist/:courseId`, `POST /student/wishlist/:courseId/move-to-cart` |
 | Cart | `GET /student/cart?coupon_code=`, `POST /student/cart {course_id}`, `DELETE /student/cart/:courseId`, `DELETE /student/cart`, `POST /student/cart/:courseId/move-to-wishlist`, `POST /student/cart/apply-coupon {code}` |
 | Checkout & payment | `POST /student/checkout {coupon_code?, course_ids?}` → Razorpay options; `POST /student/payments/verify {razorpay_order_id, razorpay_payment_id, razorpay_signature}`; `POST /student/payments/failed` |
-| Orders | `GET /student/orders`, `GET /student/orders/:orderId`, `POST /student/orders/:orderId/retry-payment`, `POST /student/orders/:orderId/cancel` |
+| Orders | `GET /student/orders` (store orders include `source: woocommerce` and `store_order_url`), `GET /student/orders/:orderId`, `POST /student/orders/:orderId/retry-payment`, `POST /student/orders/:orderId/cancel` (LMS orders only) |
+| Store purchase status | `GET /student/purchases/woocommerce/:wcOrderId` → `{status, order}` – status is processing, pending, paid, failed, cancelled or refunded (used by `/purchase-complete`) |
 | Reviews | `POST/PUT/GET/DELETE /student/courses/:courseId/review`, `GET /student/reviews` (history) |
 
 ## 4. Community — `/community` (after any purchase)
@@ -115,7 +142,8 @@ Real-time notifications: connect `socket.io` to the API host with `{ auth: { tok
 | Courses | `GET /admin/courses`, `PATCH /admin/courses/:id/approval {action: approve\|publish\|reject, approval_note}`, `PUT /admin/courses/:id/tutors {tutors:[{tutor_id,is_primary}]}` + shared management (any course) |
 | Categories | `GET/POST /admin/categories`, `PUT/DELETE /admin/categories/:id?reassign_to=` |
 | Enrollments & student progress | `GET /admin/enrollments?status=&course_id=&min_progress=`, `GET/PATCH /admin/enrollments/:id`, `POST /admin/enrollments/:id/recalculate` |
-| Orders & payments | `GET /admin/orders`, `GET /admin/orders/:id`, `PATCH /admin/orders/:id/status {status: paid\|cancelled\|failed\|pending}`, `POST /admin/orders/:id/refund`, `GET /admin/payments`, `GET /admin/payments/:id` |
+| Orders & payments | `GET /admin/orders`, `GET /admin/orders/:id`, `PATCH /admin/orders/:id/status {status: paid\|cancelled\|failed\|pending}`, `POST /admin/orders/:id/refund`, `GET /admin/payments`, `GET /admin/payments/:id`. Store orders (`?source=woocommerce`) are read-only: status/refund changes are rejected (do them in WooCommerce) |
+| WooCommerce sync | `POST /admin/courses/:courseId/woocommerce-product` (create / retry the store product), `POST /admin/woocommerce/products/sync {course_ids?}` (read price / status now), `POST /admin/woocommerce/orders/:wcOrderId/sync` (re-pull one order), `POST /admin/woocommerce/reconcile {since?}`, `POST /admin/settings/woocommerce/test`; webhook `POST /webhooks/woocommerce` |
 | Coupons | `GET/POST /admin/coupons`, `GET/PUT/DELETE /admin/coupons/:id`, `PATCH /admin/coupons/:id/status` |
 | Tutor payouts | `GET/POST /admin/payouts`, `PATCH /admin/payouts/:id` |
 | Progress & certificates | `GET /admin/project-submissions`, `GET /admin/certificates`, `POST /admin/certificates/:id/approve`, `POST /admin/certificates/:id/revoke`, `POST /admin/certificates/generate {enrollment_id, issue?}` |

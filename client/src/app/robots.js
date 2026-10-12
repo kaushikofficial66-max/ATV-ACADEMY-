@@ -1,9 +1,9 @@
 import { SITE_URL } from '@/lib/config';
 
-/** /robots.txt - index the public site, keep panels and auth screens out. */
+/** /robots.txt - the portal is private: only the legal pages and certificate verification may be indexed. */
 export default function robots() {
   return {
-    rules: [{ userAgent: '*', allow: '/', disallow: ['/student', '/tutor', '/admin', '/login', '/register', '/forgot-password', '/reset-password', '/verify-email'] }],
+    rules: [{ userAgent: '*', allow: ['/pages/', '/certificates/verify/'], disallow: ['/'] }],
     sitemap: `${SITE_URL}/sitemap.xml`
   };
 }

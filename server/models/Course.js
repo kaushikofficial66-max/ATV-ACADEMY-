@@ -47,6 +47,29 @@ Course.init(
       type: DataTypes.DECIMAL(10, 2),
       allowNull: true
     },
+    // WooCommerce product sold on the store for this course (permanent mapping).
+    woocommerce_product_id: {
+      type: DataTypes.BIGINT.UNSIGNED,
+      allowNull: true,
+      unique: true
+    },
+    // Mirror of the linked WooCommerce product (WooCommerce owns price + publishing once linked).
+    woocommerce_product_status: {
+      type: DataTypes.STRING(20),
+      allowNull: true
+    },
+    woocommerce_product_url: {
+      type: DataTypes.STRING(500),
+      allowNull: true
+    },
+    woocommerce_synced_at: {
+      type: DataTypes.DATE,
+      allowNull: true
+    },
+    woocommerce_sync_error: {
+      type: DataTypes.STRING(255),
+      allowNull: true
+    },
     duration_minutes: {
       type: DataTypes.INTEGER.UNSIGNED,
       defaultValue: 0

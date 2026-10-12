@@ -1,39 +1,9 @@
 'use client';
 
-import { Card, ProgressBar, StatusBadge } from '@/components/ui';
+import { Card, ProgressBar, ProgressRing, StatusBadge } from '@/components/ui';
 
-/**
- * Course progress under the 90% completion rule: lectures/videos take the
- * course up to the cap, the approved final project takes it to 100%.
- */
-export default function ProgressSummary({ progress }) {
-  if (!progress) return null;
-  const pct = Number(progress.completion_percentage || 0);
-  const cap = progress.progress_cap_percentage;
-  return (
-    <Card className="p-5">
-      <div className="flex items-center justify-between gap-3">
-        <p className="text-sm font-medium text-slate-700">Your progress</p>
-        <StatusBadge status={progress.status} label={progress.status_label} />
-      </div>
-      <p className="mt-3 text-3xl font-semibold text-slate-900">{pct}%</p>
-      <div className="relative mt-2">
-        <ProgressBar value={pct} />
-        {progress.requires_project && cap < 100 && (
-          <span className="absolute -top-1 h-4 w-0.5 bg-slate-400" style={{ left: `${cap}%` }} title={`${cap}% - final project unlocks`} aria-hidden />
-        )}
-      </div>
-      <p className="mt-3 text-xs text-slate-500">{hint(progress)}</p>
-      {progress.total_lectures > 0 && (
-        <p className="mt-1 text-xs text-slate-500">
-          {progress.completed_lectures} of {progress.total_lectures} lectures completed
-        </p>
-      )}
-    </Card>
-  );
-}
-
-const hint = (p) => {
+/** Friendly one-liner under the progress ring, from the 90% completion rule. */
+export const progressHint = (p) => {
   switch (p.status) {
     case 'completed':
       return 'Course completed. Your certificate is available.';
@@ -49,3 +19,38 @@ const hint = (p) => {
         : `Each lesson you play adds ${p.increment_percentage}% to your progress.`;
   }
 };
+
+/**
+ * Course progress card (ring + status + counts). Lectures/videos take the course up to the cap,
+ * the approved final project takes it to 100%.
+ */
+export default function ProgressSummary({ progress }) {
+  if (!progress) return null;
+  const pct = Number(progress.completion_percentage || 0);
+  const cap = progress.progress_cap_percentage;
+  return (
+    <Card className="p-5">
+      <div className="flex items-center gap-4">
+        <ProgressRing value={pct} size={72} stroke={7} />
+        <div className="min-w-0">
+          <p className="text-sm font-semibold text-slate-900">Your progress</p>
+          <div className="mt-1">
+            <StatusBadge status={progress.status} label={progress.status_label} />
+          </div>
+        </div>
+      </div>
+      <div className="relative mt-4">
+        <ProgressBar value={pct} />
+        {progress.requires_project && cap < 100 && (
+          <span className="absolute -top-1 h-4 w-0.5 bg-slate-400" style={{ left: `${cap}%` }} title={`${cap}% - final project unlocks`} aria-hidden />
+        )}
+      </div>
+      <p className="mt-3 text-xs leading-relaxed text-slate-500">{progressHint(progress)}</p>
+      {progress.total_lectures > 0 && (
+        <p className="mt-1 text-xs text-slate-500">
+          {progress.completed_lectures} of {progress.total_lectures} lectures completed
+        </p>
+      )}
+    </Card>
+  );
+}

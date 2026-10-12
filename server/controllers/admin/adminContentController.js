@@ -21,7 +21,8 @@ import { sendCommunication } from '../../services/communicationService.js';
 import { buildReport, exportReport } from '../../services/reportService.js';
 import { sendStoredFile, recordFile } from '../../services/storageService.js';
 import { publicUrlFor } from '../../middlewares/upload.js';
-import { getAdminSettings, updateSettings, SETTING_GROUPS, invalidateSettingsCache } from '../../services/settingsService.js';
+import { getAdminSettings, updateSettings, SETTING_GROUPS, invalidateSettingsCache, getSetting } from '../../services/settingsService.js';
+import { testConnection as testWooCommerceConnection } from '../../services/woocommerceService.js';
 import { sendMail } from '../../services/mailService.js';
 import { sendWhatsAppMessage } from '../../services/whatsappService.js';
 import { isZoomConfigured, getMeetingStartUrl } from '../../services/zoomService.js';
@@ -600,8 +601,19 @@ export const testStorageSettings = async (req, res) => {
   });
 };
 
+/** POST /admin/settings/woocommerce/test - verifies the store URL + REST API keys (reads one order). */
+export const testWooCommerceSettings = async (req, res) => {
+  const result = await testWooCommerceConnection();
+  const webhookSecret = Boolean(await getSetting('woocommerce_webhook_secret'));
+  return successResponse(res, {
+    message: webhookSecret ? 'WooCommerce REST API connection works.' : 'WooCommerce REST API connection works, but no webhook secret is set - webhooks will be rejected.',
+    data: { ...result, webhook_secret_configured: webhookSecret }
+  });
+};
+
 export default {
   testStorageSettings,
+  testWooCommerceSettings,
   listCommunityPosts,
   getCommunityPost,
   moderatePost,

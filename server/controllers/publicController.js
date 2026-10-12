@@ -27,6 +27,7 @@ import { PUBLIC_USER_ATTRS } from '../utils/serializers.js';
 import { decorateCourses, getRatingsForCourses } from '../services/courseService.js';
 import { canManageCourse, getAccessEnrollment } from '../services/accessService.js';
 import { getPublicSettings } from '../services/settingsService.js';
+import { isWooCommerceEnabled, buildBuyUrl } from '../services/woocommerceService.js';
 import { loadCertificateForRender, DOWNLOADABLE_STATUSES } from '../services/certificateService.js';
 
 const TUTOR_INCLUDE = {
@@ -233,6 +234,19 @@ export const getCourseDetails = async (req, res) => {
   if (course.status !== 'published' && !isStaffPreview) throw ApiError.notFound('Course not found.');
 
   const [decorated] = await decorateCourses([course]);
+  // Paid courses are bought on the WooCommerce store; null = not purchasable there (yet):
+  // unlinked, or the product is not published on the store.
+  const storeCheckout = await isWooCommerceEnabled();
+  const productStatus = course.woocommerce_product_status;
+  const onSale = storeCheckout && course.woocommerce_product_id && (!productStatus || productStatus === 'publish');
+  decorated.purchase = {
+    store_checkout: storeCheckout,
+    purchase_url: onSale ? await buildBuyUrl(course.woocommerce_product_id) : null,
+    product_url: onSale ? course.woocommerce_product_url : null
+  };
+  for (const key of ['woocommerce_product_id', 'woocommerce_product_status', 'woocommerce_product_url', 'woocommerce_synced_at', 'woocommerce_sync_error']) {
+    delete decorated[key];
+  }
 
   const [ratingBreakdown, projectCount, quizCount, upcomingLiveClasses, resourceVideoCount] = await Promise.all([
     Review.findAll({

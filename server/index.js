@@ -14,7 +14,7 @@ import path from 'path';
 import { connectDB, sequelize } from './config/database.js';
 import { swaggerUi, swaggerSpec, swaggerUiOptions } from './config/swagger.js';
 import apiRoutes from './routes/index.js';
-import { razorpayWebhook } from './controllers/webhookController.js';
+import { razorpayWebhook, woocommerceWebhook, atvSiteWebhook } from './controllers/webhookController.js';
 import { notFoundHandler, errorHandler } from './middlewares/errorHandler.js';
 import { UPLOAD_ROOT } from './middlewares/upload.js';
 import { initSocket } from './services/socketService.js';
@@ -61,6 +61,10 @@ app.use(morgan(NODE_ENV === 'development' ? 'dev' : 'combined'));
 
 // Razorpay webhook needs the raw body for signature verification - mount before JSON parsing.
 app.post('/api/v1/webhooks/razorpay', express.raw({ type: '*/*', limit: '1mb' }), razorpayWebhook);
+// WooCommerce order webhooks (server-to-server from antarikshtv.com, HMAC-signed): same raw-body requirement.
+app.post('/api/v1/webhooks/woocommerce', express.raw({ type: '*/*', limit: '2mb' }), woocommerceWebhook);
+// Paid orders pushed by the antarikshtv.com checkout (HMAC-signed, raw body).
+app.post('/api/v1/webhooks/atv-site', express.raw({ type: '*/*', limit: '1mb' }), atvSiteWebhook);
 
 // Compression is skipped for video streams (range responses).
 app.use(compression({ filter: (req, res) => !req.path.includes('/media/videos/') && compression.filter(req, res) }));

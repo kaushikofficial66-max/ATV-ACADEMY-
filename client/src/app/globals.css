@@ -1,26 +1,62 @@
 @import "tailwindcss";
 
-/* Brand palette (deep blue, matching the emails) - use as bg-brand-700, text-brand-800 ... */
+/* Brand palette (ATV purple, same as antarikshtv.com) - use as bg-brand-700, text-brand-800 ... */
 @theme {
-  --color-brand-50: #eff4ff;
-  --color-brand-100: #dbe6fe;
-  --color-brand-200: #bfd3fe;
-  --color-brand-300: #93b4fd;
-  --color-brand-400: #608bfa;
-  --color-brand-500: #3b66f5;
-  --color-brand-600: #2547ea;
-  --color-brand-700: #1d36d7;
-  --color-brand-800: #1e3a8a;
-  --color-brand-900: #1e2f6e;
+  --color-brand-50: #f5f0ff;
+  --color-brand-100: #ebe3ff;
+  --color-brand-200: #d9c9fd;
+  --color-brand-300: #bda0fa;
+  --color-brand-400: #9d6df5;
+  --color-brand-500: #8143ec;
+  --color-brand-600: #6d28d9;
+  --color-brand-700: #5b21b6;
+  --color-brand-800: #4c1d95;
+  --color-brand-900: #3b1678;
   --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
 }
 
 html {
   scroll-behavior: smooth;
+  -webkit-text-size-adjust: 100%;
+}
+
+/* Phones: a smaller type scale (everything in rem shrinks with it) for a compact, app-like feel.
+   Tablets and desktops keep the normal 16px scale. */
+@media (max-width: 639px) {
+  html {
+    font-size: 14px;
+  }
+  body {
+    overscroll-behavior-y: none;
+  }
+}
+
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Room for the bottom navigation bar + the phone's gesture area */
+.pb-nav {
+  padding-bottom: calc(4.5rem + env(safe-area-inset-bottom));
+}
+@media (min-width: 1024px) {
+  .pb-nav {
+    padding-bottom: 2rem;
+  }
 }
 
 body {
-  @apply bg-white text-slate-800 antialiased;
+  @apply bg-slate-50 text-slate-800 antialiased;
+}
+
+::selection {
+  background: var(--color-brand-200);
+}
+
+/* Slim, quiet scrollbars for the course list / panels */
+.scroll-thin {
+  scrollbar-width: thin;
+  scrollbar-color: #cbd5e1 transparent;
 }
 
 /* Rich text from the CMS (static pages, course descriptions) */
@@ -31,3 +67,15 @@ body {
 .prose-content ul { @apply mb-4 list-disc space-y-1 pl-6; }
 .prose-content ol { @apply mb-4 list-decimal space-y-1 pl-6; }
 .prose-content a { @apply text-brand-700 underline; }
+
+/* Bottom sheet (phone "More" menu, course contents) */
+@keyframes sheet-up {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
+}
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+.sheet-up { animation: sheet-up 0.24s cubic-bezier(0.2, 0.8, 0.2, 1); }
+.fade-in { animation: fade-in 0.18s ease-out; }

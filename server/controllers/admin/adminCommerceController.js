@@ -19,6 +19,15 @@ import { fulfillOrder, applyOrderRefund, getOrderDetails } from '../../services/
 import { refundGatewayPayment } from '../../services/paymentService.js';
 import { notifyUser } from '../../services/notificationService.js';
 import { getTutorEarnings } from '../../services/earningsService.js';
+import { syncOrderById, reconcileRecentOrders } from '../../services/woocommerceSyncService.js';
+import { ensureProductForCourse, syncCoursesFromStore } from '../../services/woocommerceProductService.js';
+
+/** WooCommerce is the source of truth for store orders: payment state and refunds change there only. */
+const assertNotStoreOrder = (order, action) => {
+  if (order.source === 'woocommerce') {
+    throw ApiError.badRequest(`This order belongs to the WooCommerce store - ${action} it in WooCommerce; the LMS updates automatically.`);
+  }
+};
 
 const BUYER = { model: User, as: 'user', attributes: ['id', 'first_name', 'last_name', 'email', 'phone'] };
 
@@ -33,6 +42,7 @@ export const listOrders = async (req, res) => {
   if (req.query.status) where.status = req.query.status;
   if (req.query.user_id) where.user_id = req.query.user_id;
   if (req.query.coupon_id) where.coupon_id = req.query.coupon_id;
+  if (req.query.source) where.source = req.query.source;
   if (req.query.search) where.order_number = { [Op.like]: `%${req.query.search}%` };
 
   const itemInclude = { model: OrderItem, as: 'items', attributes: ['id', 'course_id', 'course_title', 'price', 'discount_amount', 'final_amount'] };
@@ -78,6 +88,7 @@ export const getOrder = async (req, res) => {
 export const updateOrderStatus = async (req, res) => {
   const order = await Order.findByPk(req.params.orderId);
   if (!order) throw ApiError.notFound('Order not found.');
+  assertNotStoreOrder(order, 'change the status of');
   const { status } = req.body;
 
   if (status === 'paid') {
@@ -119,6 +130,7 @@ export const updateOrderStatus = async (req, res) => {
 export const refundOrder = async (req, res) => {
   const order = await Order.findByPk(req.params.orderId);
   if (!order) throw ApiError.notFound('Order not found.');
+  assertNotStoreOrder(order, 'refund');
   if (order.status !== 'paid') throw ApiError.badRequest('Only paid orders can be refunded.');
 
   const payment = await Payment.findOne({ where: { order_id: order.id, status: 'success' }, order: [['paid_at', 'DESC']] });
@@ -160,6 +172,56 @@ export const getPayment = async (req, res) => {
   });
   if (!payment) throw ApiError.notFound('Payment not found.');
   return successResponse(res, { data: { payment } });
+};
+
+// ==========================================================================
+// WooCommerce sync
+// ==========================================================================
+
+/** POST /admin/woocommerce/orders/:wcOrderId/sync - re-pull one store order via the REST API and apply it. */
+export const syncWooCommerceOrder = async (req, res) => {
+  const result = await syncOrderById(req.params.wcOrderId, { trigger: `admin:${req.user.id}` });
+  const order = result.order_id ? await getOrderDetails(result.order_id) : null;
+  return successResponse(res, { message: `WooCommerce order #${req.params.wcOrderId}: ${result.action.replace(/_/g, ' ')}.`, data: { result, order } });
+};
+
+/** POST /admin/woocommerce/reconcile { since? } - re-sync every store order modified since `since` (default: last run). */
+export const reconcileWooCommerce = async (req, res) => {
+  const since = req.body?.since ? new Date(req.body.since) : null;
+  if (since && Number.isNaN(since.getTime())) throw ApiError.badRequest('since must be a date.');
+  const result = await reconcileRecentOrders({ since });
+  if (result.skipped) throw ApiError.badRequest('WooCommerce reconciliation is disabled or the REST API is not configured (Admin > Settings > Woocommerce).');
+  return successResponse(res, { message: `Checked ${result.checked} order(s): ${result.synced} updated, ${result.failed} failed.`, data: result });
+};
+
+/**
+ * POST /admin/courses/:courseId/woocommerce-product - create the store product
+ * for a course now (retry after an error, or a free course / auto-create off).
+ */
+export const createCourseProduct = async (req, res) => {
+  const course = await Course.findByPk(req.params.courseId);
+  if (!course) throw ApiError.notFound('Course not found.');
+  if (course.woocommerce_product_id) throw ApiError.conflict(`This course is already linked to store product #${course.woocommerce_product_id}.`);
+  const result = await ensureProductForCourse(course, { force: true });
+  if (result.action === 'skipped') throw ApiError.badRequest('Enable WooCommerce and add REST API keys (Read/Write) in Admin > Settings > Woocommerce first.');
+  if (result.action === 'error') throw new ApiError(502, `Could not create the store product: ${result.error}`);
+  await course.reload();
+  return successResponse(res, {
+    statusCode: result.action === 'created' ? 201 : 200,
+    message: result.action === 'created' ? 'Draft product created on the store. Complete and publish it in WordPress.' : 'Linked to the existing store product.',
+    data: { course, store_product: result }
+  });
+};
+
+/** POST /admin/woocommerce/products/sync { course_ids? } - read price / status of linked products now. */
+export const syncCourseProducts = async (req, res) => {
+  const ids = Array.isArray(req.body?.course_ids) ? req.body.course_ids.map(Number).filter((n) => n > 0) : null;
+  const result = await syncCoursesFromStore({ courseIds: ids });
+  if (result.skipped) throw ApiError.badRequest('Enable WooCommerce and add REST API keys in Admin > Settings > Woocommerce first.');
+  return successResponse(res, {
+    message: `Synced ${result.synced} of ${result.checked} linked course(s)${result.missing ? `, ${result.missing} product(s) missing on the store` : ''}${result.failed ? `, ${result.failed} failed` : ''}.`,
+    data: result
+  });
 };
 
 // ==========================================================================
@@ -356,6 +418,10 @@ export default {
   refundOrder,
   listPayments,
   getPayment,
+  syncWooCommerceOrder,
+  reconcileWooCommerce,
+  createCourseProduct,
+  syncCourseProducts,
   listCoupons,
   createCoupon,
   getCoupon,

@@ -1,18 +1,19 @@
 'use client';
 
 import { useState } from 'react';
-import Link from 'next/link';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
+import { GraduationCap } from 'lucide-react';
 import { get } from '@/lib/api/client';
 import { EP } from '@/lib/api/endpoints';
-import { Button, Card, PageHeader, Pagination, ProgressBar, Select, StatusBadge } from '@/components/ui';
+import { Card, PageHeader, Pagination } from '@/components/ui';
 import { QueryState, EmptyState } from '@/components/feedback/States';
 import { Loader } from '@/components/feedback/Loader';
 import { learningKeys } from '@/features/learning/keys';
-import { assetUrl, fullName } from '@/lib/utils';
+import CourseTile from '@/features/learning/CourseTile';
+import { cn, fullName } from '@/lib/utils';
 
 const FILTERS = [
-  { value: '', label: 'All courses' },
+  { value: '', label: 'All' },
   { value: 'in_progress', label: 'In progress' },
   { value: 'not_started', label: 'Not started' },
   { value: 'completed', label: 'Completed' }
@@ -30,59 +31,56 @@ export default function MyCoursesPage() {
 
   return (
     <>
-      <PageHeader
-        title="My courses"
-        actions={
-          <Select
-            value={status}
-            onChange={(e) => {
-              setStatus(e.target.value);
+      <PageHeader title="My courses" description="Everything you have enrolled in" />
+
+      <div className="mb-5 flex flex-wrap gap-2" role="tablist" aria-label="Filter courses">
+        {FILTERS.map((f) => (
+          <button
+            key={f.value}
+            type="button"
+            role="tab"
+            aria-selected={status === f.value}
+            onClick={() => {
+              setStatus(f.value);
               setPage(1);
             }}
-            aria-label="Filter courses"
+            className={cn(
+              'rounded-full px-4 py-1.5 text-sm font-medium transition',
+              status === f.value ? 'bg-brand-700 text-white shadow-sm' : 'border border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+            )}
           >
-            {FILTERS.map((f) => (
-              <option key={f.value} value={f.value}>
-                {f.label}
-              </option>
-            ))}
-          </Select>
-        }
-      />
+            {f.label}
+          </button>
+        ))}
+      </div>
+
       <QueryState query={query} loading={<Loader />}>
         {({ data, meta }) =>
           data.enrollments.length === 0 ? (
             <Card>
-              <EmptyState title="No courses here yet" action={<Button href="/courses">Browse courses</Button>} />
+              <EmptyState
+                icon={GraduationCap}
+                title={status ? 'No courses in this view' : 'No courses yet'}
+                description={status ? 'Try another filter.' : 'Courses you purchase appear here automatically. If you just paid, it can take a minute - or write to support@antarikshtv.com.'}
+              />
             </Card>
           ) : (
             <>
-              <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
+              <div className="grid gap-6 sm:grid-cols-2 xl:grid-cols-3">
                 {data.enrollments.map((e) => (
-                  <Card key={e.id} className="flex flex-col overflow-hidden">
-                    <Link href={`/student/learn/${e.course.id}`} className="block aspect-video bg-slate-100">
-                      {e.course.thumbnail_url && (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img src={assetUrl(e.course.thumbnail_url)} alt="" className="size-full object-cover" />
-                      )}
-                    </Link>
-                    <div className="flex flex-1 flex-col p-4">
-                      <Link href={`/student/learn/${e.course.id}`} className="font-semibold text-slate-900 hover:text-brand-800">
-                        {e.course.title}
-                      </Link>
-                      <p className="mt-1 text-xs text-slate-500">{e.course.tutors?.map(fullName).join(', ')}</p>
-                      <div className="mt-auto pt-4">
-                        <div className="mb-2 flex items-center justify-between text-xs">
-                          <StatusBadge status={e.progress?.status} label={e.progress?.status_label} />
-                          <span className="text-slate-500">{e.progress?.completion_percentage ?? 0}%</span>
-                        </div>
-                        <ProgressBar value={e.progress?.completion_percentage} />
-                      </div>
-                    </div>
-                  </Card>
+                  <CourseTile
+                    key={e.id}
+                    id={e.course.id}
+                    title={e.course.title}
+                    thumbnail={e.course.thumbnail_url}
+                    tutors={e.course.tutors?.map(fullName).join(', ')}
+                    pct={e.progress?.completion_percentage ?? 0}
+                    status={e.progress?.status}
+                    statusLabel={e.progress?.status_label}
+                  />
                 ))}
               </div>
-              <Card className="mt-5">
+              <Card className="mt-6">
                 <Pagination meta={meta} onPageChange={setPage} />
               </Card>
             </>

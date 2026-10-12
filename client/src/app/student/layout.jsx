@@ -1,5 +1,5 @@
 import RoleGuard from '@/lib/auth/RoleGuard';
-import PanelShell from '@/components/layout/PanelShell';
+import StudentShell from '@/components/layout/StudentShell';
 
 export const metadata = { robots: { index: false, follow: false } };
 
@@ -7,7 +7,7 @@ export const metadata = { robots: { index: false, follow: false } };
 export default function StudentLayout({ children }) {
   return (
     <RoleGuard role="student">
-      <PanelShell role="student">{children}</PanelShell>
+      <StudentShell>{children}</StudentShell>
     </RoleGuard>
   );
 }

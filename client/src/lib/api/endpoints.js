@@ -78,6 +78,7 @@ export const EP = {
     order: (id) => `/student/orders/${id}`,
     retryPayment: (id) => `/student/orders/${id}/retry-payment`,
     cancelOrder: (id) => `/student/orders/${id}/cancel`,
+    storePurchase: (wcOrderId) => `/student/purchases/woocommerce/${wcOrderId}`,
     reviews: '/student/reviews',
     courseReview: (courseId) => `/student/courses/${courseId}/review`
   },
@@ -136,6 +137,10 @@ export const EP = {
     orderRefund: (id) => `/admin/orders/${id}/refund`,
     payments: '/admin/payments',
     payment: (id) => `/admin/payments/${id}`,
+    wooSyncOrder: (wcOrderId) => `/admin/woocommerce/orders/${wcOrderId}/sync`,
+    wooReconcile: '/admin/woocommerce/reconcile',
+    wooSyncProducts: '/admin/woocommerce/products/sync',
+    courseStoreProduct: (courseId) => `/admin/courses/${courseId}/woocommerce-product`,
     coupons: '/admin/coupons',
     coupon: (id) => `/admin/coupons/${id}`,
     couponStatus: (id) => `/admin/coupons/${id}/status`,

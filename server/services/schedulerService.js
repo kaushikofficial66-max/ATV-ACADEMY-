@@ -7,6 +7,8 @@ import { syncProcessingVideos } from './videoService.js';
 import { getStorageDriver } from './storageDriver.js';
 import { isVimeoConfigured } from './vimeoService.js';
 import { isR2Configured } from './r2Service.js';
+import { reconcileRecentOrders } from './woocommerceSyncService.js';
+import { syncCoursesFromStore } from './woocommerceProductService.js';
 
 const REMINDER_MINUTES = 30;
 const AUTO_COMPLETE_AFTER_MINUTES = 30;
@@ -61,10 +63,13 @@ const expireCoupons = async () => {
   await Coupon.update({ status: 'expired' }, { where: { status: 'active', expires_at: { [Op.lt]: new Date() } } });
 };
 
-/** Pending orders never paid are cancelled after 48h so reports stay clean. */
+/**
+ * Pending LMS-checkout orders never paid are cancelled after 48h so reports stay clean.
+ * WooCommerce mirrors are left alone: their status always follows the store.
+ */
 const cancelStaleOrders = async () => {
   const cutoff = new Date(Date.now() - STALE_ORDER_HOURS * 60 * 60 * 1000);
-  const stale = await Order.findAll({ where: { status: 'pending', created_at: { [Op.lt]: cutoff } }, attributes: ['id'] });
+  const stale = await Order.findAll({ where: { status: 'pending', source: 'lms', created_at: { [Op.lt]: cutoff } }, attributes: ['id'] });
   if (!stale.length) return;
   const ids = stale.map((o) => o.id);
   await Order.update({ status: 'cancelled' }, { where: { id: { [Op.in]: ids } } });
@@ -93,6 +98,10 @@ export const startScheduler = () => {
   cron.schedule('30 3 * * *', safely('cancel-stale-orders', cancelStaleOrders));
   // Picks up Vimeo transcoding results (Vimeo videos start as "processing").
   cron.schedule('*/5 * * * *', safely('sync-vimeo-videos', syncProcessingVideos));
+  // Re-syncs WooCommerce orders modified since the last run (missed / failed webhooks).
+  cron.schedule('*/10 * * * *', safely('woocommerce-reconcile', reconcileRecentOrders));
+  // Course price / publish status from linked store products (backs up the product webhook).
+  cron.schedule('40 * * * *', safely('woocommerce-product-sync', syncCoursesFromStore));
   safely('storage-check', warnIfLocalStorageInProduction)();
   console.log('[Scheduler]: background jobs started');
 };

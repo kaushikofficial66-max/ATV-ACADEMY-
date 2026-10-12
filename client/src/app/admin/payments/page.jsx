@@ -8,13 +8,16 @@ import { formatDateTime, formatPrice, fullName, humanize } from '@/lib/utils';
 export default function AdminPaymentsPage() {
   return (
     <>
-      <PageHeader title="Payments" description="Razorpay transactions" />
+      <PageHeader title="Payments" description="Store (WooCommerce) payment references and legacy Razorpay transactions. Full payment records live in WooCommerce." />
       <ResourceList
         queryKey={['admin', 'payments']}
         endpoint={EP.admin.payments}
         dataKey="payments"
         searchPlaceholder="Payment / order id..."
-        filters={[{ name: 'status', label: 'Status', options: ['created', 'pending', 'success', 'failed', 'refunded'] }]}
+        filters={[
+          { name: 'status', label: 'Status', options: ['created', 'pending', 'success', 'failed', 'refunded'] },
+          { name: 'gateway', label: 'Source', options: ['woocommerce', 'razorpay', 'manual', 'free'] }
+        ]}
         columns={[
           { key: 'gateway_payment_id', header: 'Payment', render: (p) => <span className="font-mono text-xs">{p.gateway_payment_id || p.gateway_order_id}</span> },
           { key: 'order', header: 'Order', render: (p) => <span className="font-mono text-xs">{p.order?.order_number}</span> },

@@ -23,10 +23,30 @@ import {
   startGatewayPayment,
   fulfillOrder,
   markPaymentFailed,
-  getOrderDetails
+  getOrderDetails,
+  assertLmsCheckoutAllowed
 } from '../../services/orderService.js';
 import { verifyPaymentSignature, fetchGatewayPayment } from '../../services/paymentService.js';
+import { buildOrderUrl } from '../../services/woocommerceService.js';
+import { getPurchaseStatus } from '../../services/woocommerceSyncService.js';
 import { toMoney } from '../../utils/helpers.js';
+
+/** Internal sync bookkeeping that students do not need to see. */
+const STUDENT_HIDDEN_ORDER_ATTRS = ['sync_note', 'woocommerce_modified_at'];
+
+/** Store orders are managed on WooCommerce; students get a link to the store's order page. */
+const presentOrder = async (order) => {
+  const json = order.toJSON ? order.toJSON() : { ...order };
+  STUDENT_HIDDEN_ORDER_ATTRS.forEach((key) => delete json[key]);
+  json.store_order_url = json.source === 'woocommerce' ? await buildOrderUrl(json.woocommerce_order_id) : null;
+  return json;
+};
+
+const assertLmsOrder = (order) => {
+  if (order.source === 'woocommerce') {
+    throw ApiError.badRequest('This order was placed on our store. Manage payments, cancellations and refunds there.');
+  }
+};
 
 const findPurchasableCourse = async (courseId) => {
   const course = await Course.findByPk(courseId);
@@ -87,6 +107,7 @@ export const removeFromWishlist = async (req, res) => {
 
 /** POST /student/wishlist/:courseId/move-to-cart */
 export const moveWishlistToCart = async (req, res) => {
+  await assertLmsCheckoutAllowed();
   const course = await findPurchasableCourse(req.params.courseId);
   if (await getAccessEnrollment(req.user.id, course.id)) throw ApiError.conflict('You are already enrolled in this course.');
   const cart = await getOrCreateActiveCart(req.user.id);
@@ -109,6 +130,7 @@ export const getCart = async (req, res) => {
 
 /** POST /student/cart { course_id } */
 export const addToCart = async (req, res) => {
+  await assertLmsCheckoutAllowed();
   const course = await findPurchasableCourse(req.body.course_id);
   if (await getAccessEnrollment(req.user.id, course.id)) throw ApiError.conflict('You are already enrolled in this course.');
   const cart = await getOrCreateActiveCart(req.user.id);
@@ -155,6 +177,8 @@ export const moveCartToWishlist = async (req, res) => {
  * Validates the coupon against the current cart (or the given courses for "Buy now").
  */
 export const applyCoupon = async (req, res) => {
+  // Coupons are validated only by WooCommerce when it handles commerce.
+  await assertLmsCheckoutAllowed();
   if (Array.isArray(req.body.course_ids) && req.body.course_ids.length) {
     const courses = await Course.findAll({ where: { id: { [Op.in]: req.body.course_ids }, status: 'published' } });
     const subtotal = toMoney(courses.reduce((s, c) => s + effectivePrice(c), 0));
@@ -234,6 +258,8 @@ export const reportPaymentFailure = async (req, res) => {
 export const retryPayment = async (req, res) => {
   const order = await Order.findOne({ where: { id: req.params.orderId, user_id: req.user.id } });
   if (!order) throw ApiError.notFound('Order not found.');
+  assertLmsOrder(order);
+  await assertLmsCheckoutAllowed();
   if (!['pending', 'failed'].includes(order.status)) throw ApiError.badRequest(`A ${order.status} order cannot be paid.`);
 
   const items = await OrderItem.findAll({ where: { order_id: order.id } });
@@ -250,6 +276,7 @@ export const retryPayment = async (req, res) => {
 export const cancelOrder = async (req, res) => {
   const order = await Order.findOne({ where: { id: req.params.orderId, user_id: req.user.id } });
   if (!order) throw ApiError.notFound('Order not found.');
+  assertLmsOrder(order);
   if (!['pending', 'failed'].includes(order.status)) throw ApiError.badRequest(`A ${order.status} order cannot be cancelled.`);
   await order.update({ status: 'cancelled' });
   await Payment.update({ status: 'failed' }, { where: { order_id: order.id, status: { [Op.in]: ['created', 'pending'] } } });
@@ -267,6 +294,7 @@ export const listMyOrders = async (req, res) => {
   if (req.query.status) where.status = req.query.status;
   const { count, rows } = await Order.findAndCountAll({
     where,
+    attributes: { exclude: STUDENT_HIDDEN_ORDER_ATTRS },
     include: [
       { model: OrderItem, as: 'items', include: [{ model: Course, as: 'course', attributes: ['id', 'title', 'slug', 'thumbnail_url'] }] },
       { model: Payment, as: 'payments', attributes: ['id', 'status', 'payment_method', 'paid_at', 'amount', 'gateway_payment_id'] }
@@ -276,7 +304,7 @@ export const listMyOrders = async (req, res) => {
     offset,
     distinct: true
   });
-  return successResponse(res, { data: { orders: rows }, meta: meta(count) });
+  return successResponse(res, { data: { orders: await Promise.all(rows.map(presentOrder)) }, meta: meta(count) });
 };
 
 /** GET /student/orders/:orderId - order details incl. payment status. */
@@ -286,8 +314,33 @@ export const getMyOrder = async (req, res) => {
   const latestPayment = order.payments?.[0] || null;
   return successResponse(res, {
     data: {
-      order,
+      order: await presentOrder(order),
       payment_status: latestPayment ? latestPayment.status : order.status === 'paid' ? 'success' : 'not_started'
+    }
+  });
+};
+
+/**
+ * GET /student/purchases/woocommerce/:wcOrderId
+ * Status of a store purchase for the logged-in student ("processing" until the
+ * WooCommerce order has been verified and synced). Never grants access itself.
+ */
+export const getStorePurchaseStatus = async (req, res) => {
+  const { status, order } = await getPurchaseStatus(req.user, req.params.wcOrderId);
+  return successResponse(res, {
+    data: {
+      status,
+      order: order
+        ? {
+            id: order.id,
+            order_number: order.order_number,
+            status: order.status,
+            woocommerce_status: order.woocommerce_status,
+            total_amount: order.total_amount,
+            currency: order.currency,
+            courses: (order.items || []).map((i) => ({ id: i.course_id, title: i.course_title }))
+          }
+        : null
     }
   });
 };
@@ -309,5 +362,6 @@ export default {
   retryPayment,
   cancelOrder,
   listMyOrders,
-  getMyOrder
+  getMyOrder,
+  getStorePurchaseStatus
 };

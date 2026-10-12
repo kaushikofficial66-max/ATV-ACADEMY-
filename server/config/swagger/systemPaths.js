@@ -175,6 +175,54 @@ Verifies HMAC signature (\`X-Razorpay-Signature\`) using raw body stream. Fulfil
         401: { description: 'Invalid HMAC webhook signature' }
       }
     }
+  },
+
+  '/webhooks/woocommerce': {
+    post: {
+      tags: ['32. Media & Webhooks'],
+      summary: 'WooCommerce Order Webhook (store purchases -> enrollment)',
+      description: `Server-to-server webhook from the WooCommerce store (the commerce source of truth). Configure in WooCommerce > Settings > Advanced > Webhooks with API version v3, the shared secret (WOOCOMMERCE_WEBHOOK_SECRET) and topics **Order created / updated / deleted / restored**.
+
+- Verifies \`X-WC-Webhook-Signature\` = base64(HMAC-SHA256(raw body, secret)); requests are rejected while no secret is configured.
+- \`X-WC-Webhook-Source\` must match the configured store URL.
+- Paid statuses (default \`processing\`, \`completed\`) find/create the student by billing email, mirror the order + payment reference and enroll mapped courses (\`courses.woocommerce_product_id\`).
+- \`refunded\`, \`cancelled\`, \`failed\`, \`on-hold\`, \`pending\` and deletions revoke access granted by the order (history kept). Fully refunded line items revoke only their course.
+- Idempotent (unique \`woocommerce_order_id\`, \`user_id + course_id\`); payloads older than the last applied \`date_modified_gmt\` are ignored.
+- The unsigned \`webhook_id=<id>\` ping sent when saving the webhook is acknowledged without side effects.
+- **Product updated / deleted** topics update the linked course's price, sale price, publish status and product URL (WooCommerce owns them once linked).`,
+      security: [],
+      parameters: [
+        { name: 'x-wc-webhook-signature', in: 'header', required: true, schema: { type: 'string' }, description: 'base64 HMAC-SHA256 of the raw body with the webhook secret' },
+        { name: 'x-wc-webhook-topic', in: 'header', required: true, schema: { type: 'string', enum: ['order.created', 'order.updated', 'order.deleted', 'order.restored', 'product.updated', 'product.deleted'] } },
+        { name: 'x-wc-webhook-source', in: 'header', required: false, schema: { type: 'string', example: 'https://antarikshtv.com/' } }
+      ],
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              description: 'WooCommerce REST v3 order',
+              properties: {
+                id: { type: 'integer', example: 1048 },
+                status: { type: 'string', example: 'completed' },
+                total: { type: 'string', example: '9500.00' },
+                billing: { type: 'object', properties: { email: { type: 'string' }, first_name: { type: 'string' }, last_name: { type: 'string' } } },
+                line_items: { type: 'array', items: { type: 'object', properties: { product_id: { type: 'integer', example: 325 }, quantity: { type: 'integer' } } } },
+                coupon_lines: { type: 'array', items: { type: 'object' } },
+                date_modified_gmt: { type: 'string' }
+              }
+            }
+          }
+        }
+      },
+      responses: {
+        200: { description: 'Processed or acknowledged (result.action: enrolled | already_paid | refunded_access_revoked | cancelled | ignored | stale ...)' },
+        400: { description: 'Invalid payload (missing id / line_items, unknown status, malformed JSON)' },
+        401: { description: 'Missing or invalid signature, or no webhook secret configured' },
+        403: { description: 'X-WC-Webhook-Source does not match the configured store' }
+      }
+    }
   }
 };
 

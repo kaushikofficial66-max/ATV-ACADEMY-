@@ -669,6 +669,63 @@ export const adminPaths = {
     }
   },
 
+  '/admin/woocommerce/orders/{wcOrderId}/sync': {
+    post: {
+      tags: ['23. Admin - Orders, Payments & Coupons'],
+      summary: 'Resync WooCommerce Order',
+      description: 'Pulls the order from the WooCommerce REST API and applies it (enroll / revoke). Use after fixing a product mapping or a missed webhook. Requires the REST API keys.',
+      security: [{ bearerAuth: [] }, { cookieAuth: [] }],
+      parameters: [{ name: 'wcOrderId', in: 'path', required: true, schema: { type: 'integer' }, description: 'WooCommerce order id' }],
+      responses: {
+        200: { description: 'Sync result and the LMS mirror order' },
+        502: { description: 'WooCommerce unavailable / API error' },
+        503: { description: 'REST API not configured' }
+      }
+    }
+  },
+
+  '/admin/courses/{courseId}/woocommerce-product': {
+    post: {
+      tags: ['23. Admin - Orders, Payments & Coupons'],
+      summary: 'Create Store Product for Course',
+      description: 'Creates a draft WooCommerce product for the course (or re-links one already created, by SKU `atv-course-<id>`) and links it. Normally automatic when a paid course is saved; use to retry after an error or for a free course. Needs Read/Write REST keys.',
+      security: [{ bearerAuth: [] }, { cookieAuth: [] }],
+      parameters: [{ name: 'courseId', in: 'path', required: true, schema: { type: 'integer' } }],
+      responses: {
+        201: { description: 'Draft product created and linked' },
+        200: { description: 'Existing product re-linked' },
+        400: { description: 'WooCommerce not enabled / REST keys missing' },
+        409: { description: 'Course already linked' },
+        502: { description: 'Store error' }
+      }
+    }
+  },
+
+  '/admin/woocommerce/products/sync': {
+    post: {
+      tags: ['23. Admin - Orders, Payments & Coupons'],
+      summary: 'Sync Course Prices from Store',
+      description: 'Reads price, sale price, publish status and URL of linked products (all, or `course_ids`) and updates the courses. Also runs hourly and on Product updated / deleted webhooks.',
+      security: [{ bearerAuth: [] }, { cookieAuth: [] }],
+      requestBody: { content: { 'application/json': { schema: { type: 'object', properties: { course_ids: { type: 'array', items: { type: 'integer' } } } } } } },
+      responses: { 200: { description: '{ checked, synced, missing, failed }' } }
+    }
+  },
+
+  '/admin/woocommerce/reconcile': {
+    post: {
+      tags: ['23. Admin - Orders, Payments & Coupons'],
+      summary: 'Reconcile Recent WooCommerce Orders',
+      description: 'Re-syncs every store order modified since `since` (default: the previous run). Also runs every 10 minutes in the background.',
+      security: [{ bearerAuth: [] }, { cookieAuth: [] }],
+      requestBody: { content: { 'application/json': { schema: { type: 'object', properties: { since: { type: 'string', format: 'date-time' } } } } } },
+      responses: {
+        200: { description: '{ checked, synced, ignored, failed }' },
+        400: { description: 'Disabled or REST API not configured' }
+      }
+    }
+  },
+
   '/admin/coupons': {
     get: {
       tags: ['23. Admin - Orders, Payments & Coupons'],

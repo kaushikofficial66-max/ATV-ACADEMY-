@@ -4,16 +4,17 @@ import { use, useRef } from 'react';
 import Link from 'next/link';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
-import { ArrowLeft, ChevronLeft, ChevronRight, CircleCheck, Download } from 'lucide-react';
-import { get, post, downloadFile } from '@/lib/api/client';
+import { ArrowRight, ChevronLeft, ChevronRight, CircleCheck } from 'lucide-react';
+import { get, post } from '@/lib/api/client';
 import { EP } from '@/lib/api/endpoints';
-import { Button, Card, CardHeader } from '@/components/ui';
-import { QueryState } from '@/components/feedback/States';
-import { Loader } from '@/components/feedback/Loader';
+import { Button, ProgressRing } from '@/components/ui';
+import { ErrorState } from '@/components/feedback/States';
+import { FullPageLoader, Loader } from '@/components/feedback/Loader';
 import { useApiMutation } from '@/hooks/useApiMutation';
 import { learningKeys } from '@/features/learning/keys';
-import CurriculumNav from '@/features/learning/CurriculumNav';
-import ProgressSummary from '@/features/learning/ProgressSummary';
+import PlayerLayout from '@/features/learning/PlayerLayout';
+import LectureTabs from '@/features/learning/LectureTabs';
+import { progressHint } from '@/features/learning/ProgressSummary';
 import VideoPlayer from '@/features/videos/VideoPlayer';
 
 const SAVE_EVERY_SECONDS = 15;
@@ -58,98 +59,89 @@ export default function LecturePage({ params }) {
     invalidate: [learningKeys.player(courseId), learningKeys.lecture(lectureId)]
   });
 
+  if (player.isPending) return <FullPageLoader />;
+  if (player.isError) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-slate-50">
+        <ErrorState error={player.error} onRetry={player.refetch} title="Could not open this course" />
+      </div>
+    );
+  }
+  const course = player.data;
+
   return (
-    <div className="grid gap-6 xl:grid-cols-[1fr_340px]">
-      <div className="min-w-0 space-y-4">
-        <Link href={`/student/learn/${courseId}`} className="inline-flex items-center gap-1 text-sm text-slate-500 hover:text-slate-800">
-          <ArrowLeft className="size-4" aria-hidden /> {player.data?.course.title || 'Course'}
-        </Link>
-        <QueryState query={lecture} loading={<Loader />}>
-          {(d) => (
-            <>
-              {d.video ? (
+    <PlayerLayout courseId={courseId} courseTitle={course.course.title} curriculum={course.curriculum} activeLectureId={lectureId}>
+      {/* Course progress strip */}
+      <div className="flex items-center justify-between gap-3 border-b border-slate-200 bg-white px-4 py-3 sm:gap-4 sm:px-6 sm:py-4">
+        <div className="min-w-0">
+          <p className="text-sm font-semibold text-slate-900">Course progress</p>
+          <p className="mt-0.5 line-clamp-1 max-w-2xl text-xs text-slate-500 sm:line-clamp-2">{course.progress ? progressHint(course.progress) : 'Staff preview - progress is not tracked.'}</p>
+          <Link href={`/student/learn/${courseId}`} className="mt-1.5 inline-flex items-center gap-1 text-xs font-medium text-brand-700 hover:underline">
+            View details <ArrowRight className="size-3.5" aria-hidden />
+          </Link>
+        </div>
+        {course.progress && <ProgressRing value={course.progress.completion_percentage} size={56} />}
+      </div>
+
+      <div className="mx-auto w-full max-w-5xl px-4 py-4 sm:px-6 sm:py-5">
+        {lecture.isPending && <Loader />}
+        {lecture.isError && <ErrorState error={lecture.error} onRetry={lecture.refetch} title="Could not load this lecture" />}
+        {lecture.data && (
+          <>
+            <p className="mb-3 text-sm text-slate-600">
+              <span className="font-semibold text-slate-900">Lecture:</span> {lecture.data.lecture.title}
+            </p>
+
+            {lecture.data.video ? (
+              <div className="-mx-4 overflow-hidden bg-black sm:mx-0 sm:rounded-xl sm:shadow-lg sm:shadow-slate-900/10">
                 <VideoPlayer
-                  key={d.video.id}
-                  playback={d.video.playback}
-                  title={d.video.title}
-                  startAt={d.video.progress.last_position_seconds}
+                  key={lecture.data.video.id}
+                  playback={lecture.data.video.playback}
+                  title={lecture.data.video.title}
+                  startAt={lecture.data.video.progress.last_position_seconds}
                   onPlay={onPlay}
                   onTimeUpdate={onTimeUpdate}
-                  onEnded={() => d.is_enrolled && saveProgress(true)}
+                  onEnded={() => lecture.data.is_enrolled && saveProgress(true)}
                 />
-              ) : null}
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div>
-                  <p className="text-xs uppercase tracking-wide text-slate-500">{d.lecture.section.title}</p>
-                  <h1 className="text-xl font-semibold text-slate-900">{d.lecture.title}</h1>
-                </div>
-                {d.is_enrolled &&
-                  (d.progress.completed ? (
-                    <span className="inline-flex items-center gap-1 text-sm font-medium text-green-700">
+              </div>
+            ) : (
+              <div className="flex aspect-video items-center justify-center rounded-xl border border-dashed border-slate-300 bg-white text-sm text-slate-500">
+                This lecture has no video. See the overview below.
+              </div>
+            )}
+
+            {/* Previous / complete / next */}
+            <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+              {lecture.data.navigation.previous ? (
+                <Button href={`/student/learn/${courseId}/lecture/${lecture.data.navigation.previous.id}`} variant="secondary" size="sm">
+                  <ChevronLeft className="size-4" aria-hidden /> Previous
+                </Button>
+              ) : (
+                <span />
+              )}
+              <div className="flex flex-wrap items-center gap-3">
+                {lecture.data.is_enrolled &&
+                  (lecture.data.progress.completed ? (
+                    <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-3 py-1.5 text-sm font-medium text-emerald-700">
                       <CircleCheck className="size-4" aria-hidden /> Completed
                     </span>
                   ) : (
                     <Button variant="secondary" size="sm" loading={complete.isPending} onClick={() => complete.mutate()}>
-                      Mark as complete
+                      <CircleCheck className="size-4" aria-hidden /> Mark as complete
                     </Button>
                   ))}
-              </div>
-              {d.lecture.description && <div className="whitespace-pre-line text-sm leading-relaxed text-slate-700">{d.lecture.description}</div>}
-
-              {d.resources.length > 0 && (
-                <Card>
-                  <CardHeader title="Resources" />
-                  <ul className="divide-y divide-slate-100">
-                    {d.resources.map((r) => (
-                      <li key={r.id} className="flex items-center justify-between gap-3 px-5 py-3 text-sm">
-                        <span>{r.title || r.file_name}</span>
-                        <Button size="sm" variant="ghost" onClick={() => downloadFile(EP.student.resourceDownload(r.id), r.file_name)}>
-                          <Download className="size-4" aria-hidden /> Download
-                        </Button>
-                      </li>
-                    ))}
-                  </ul>
-                </Card>
-              )}
-              {d.quizzes.length > 0 && (
-                <div className="flex flex-wrap gap-2">
-                  {d.quizzes.map((q) => (
-                    <Button key={q.id} href={`/student/quizzes/${q.id}`} variant="secondary" size="sm">
-                      Quiz: {q.title}
-                    </Button>
-                  ))}
-                </div>
-              )}
-
-              <div className="flex justify-between border-t border-slate-200 pt-4">
-                {d.navigation.previous ? (
-                  <Button href={`/student/learn/${courseId}/lecture/${d.navigation.previous.id}`} variant="ghost" size="sm">
-                    <ChevronLeft className="size-4" aria-hidden /> Previous
-                  </Button>
-                ) : (
-                  <span />
-                )}
-                {d.navigation.next && (
-                  <Button href={`/student/learn/${courseId}/lecture/${d.navigation.next.id}`} size="sm">
-                    Next <ChevronRight className="size-4" aria-hidden />
+                {lecture.data.navigation.next && (
+                  <Button href={`/student/learn/${courseId}/lecture/${lecture.data.navigation.next.id}`} size="sm">
+                    Next lecture <ChevronRight className="size-4" aria-hidden />
                   </Button>
                 )}
               </div>
-            </>
-          )}
-        </QueryState>
-      </div>
+            </div>
 
-      <aside className="space-y-4">
-        {player.data && (
-          <>
-            <ProgressSummary progress={player.data.progress} />
-            <Card className="max-h-[70vh] overflow-y-auto">
-              <CurriculumNav courseId={courseId} curriculum={player.data.curriculum} activeLectureId={lectureId} />
-            </Card>
+            <LectureTabs courseId={courseId} lectureId={lectureId} lecture={lecture.data} canRate={Boolean(lecture.data.is_enrolled)} />
           </>
         )}
-      </aside>
-    </div>
+      </div>
+    </PlayerLayout>
   );
 }

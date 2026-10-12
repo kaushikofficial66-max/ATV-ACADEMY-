@@ -96,6 +96,24 @@ const privacyPayload = (cfg) => ({
   comments: 'nobody'
 });
 
+/**
+ * Puts a video into the configured Vimeo folder (VIMEO_FOLDER_ID). Never throws:
+ * returns { moved } | { skipped } | { moved: false, error }. Vimeo only allows this when the access
+ * token has the "interact" scope, so a 403 gets an explicit hint instead of a silent miss.
+ */
+export const moveToConfiguredFolder = async (videoId) => {
+  const cfg = await getVimeoConfig();
+  if (!cfg.folderId) return { moved: false, skipped: true };
+  try {
+    await api('put', `/me/projects/${encodeURIComponent(cfg.folderId)}/videos/${videoId}`, { action: 'move to folder' });
+    return { moved: true };
+  } catch (error) {
+    const hint = /interact/i.test(error.message) ? " Create a new Vimeo access token that also has the 'interact' scope and set it as VIMEO_ACCESS_TOKEN." : '';
+    console.warn(`[Vimeo]: video ${videoId} was NOT moved into folder ${cfg.folderId}: ${error.message}.${hint}`);
+    return { moved: false, error: `${error.message}.${hint}` };
+  }
+};
+
 /** Applies embed-domain whitelist and folder after creation (best effort, never throws). */
 const finishVideoSetup = async (videoId, cfg) => {
   for (const domain of cfg.embedDomains) {
@@ -105,13 +123,7 @@ const finishVideoSetup = async (videoId, cfg) => {
       console.warn(`[Vimeo]: ${error.message}`);
     }
   }
-  if (cfg.folderId) {
-    try {
-      await api('put', `/me/projects/${encodeURIComponent(cfg.folderId)}/videos/${videoId}`, { action: 'move to folder' });
-    } catch (error) {
-      console.warn(`[Vimeo]: ${error.message}`);
-    }
-  }
+  await moveToConfiguredFolder(videoId);
 };
 
 /** Creates a Vimeo video placeholder with a tus upload link. */
@@ -253,7 +265,10 @@ export const getDirectPlayLinks = async (videoId) => {
 /** Cheap credential check used by Admin > Settings > Storage > Test. */
 export const testVimeoConnection = async () => {
   const data = await api('get', '/oauth/verify', { action: 'connection test' });
-  const missing = ['upload', 'edit', 'delete', 'private'].filter((s) => !String(data.scope || '').split(' ').includes(s));
+  const cfg = await getVimeoConfig();
+  // "interact" is what lets the server place uploads into the folder VIMEO_FOLDER_ID.
+  const required = ['upload', 'edit', 'delete', 'private', ...(cfg.folderId ? ['interact'] : [])];
+  const missing = required.filter((s) => !String(data.scope || '').split(' ').includes(s));
   return {
     ok: missing.length === 0,
     account: data.user?.account || null,
@@ -277,5 +292,6 @@ export default {
   mapVimeoState,
   playerUrl,
   getDirectPlayLinks,
+  moveToConfiguredFolder,
   testVimeoConnection
 };

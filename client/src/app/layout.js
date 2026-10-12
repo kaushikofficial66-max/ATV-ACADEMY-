@@ -5,16 +5,17 @@ import { SITE_NAME, SITE_URL } from '@/lib/config';
 
 const inter = Inter({ variable: '--font-inter', subsets: ['latin'], display: 'swap' });
 
-/** Site-wide SEO defaults; pages override title/description/openGraph. */
+/** The portal is private (login required); pages opt in to indexing individually. */
 export const metadata = {
   metadataBase: new URL(SITE_URL),
-  title: { default: `${SITE_NAME} - Learn. Build. Grow.`, template: `%s | ${SITE_NAME}` },
-  description: 'Online courses with recorded lessons, live classes, projects and certificates.',
+  title: { default: `${SITE_NAME} - Learning portal`, template: `%s | ${SITE_NAME}` },
+  description: 'Log in to your courses: recorded lessons, live classes, projects and certificates.',
   applicationName: SITE_NAME,
-  openGraph: { type: 'website', siteName: SITE_NAME, locale: 'en_IN', url: '/' },
-  twitter: { card: 'summary_large_image' },
-  robots: { index: true, follow: true }
+  robots: { index: false, follow: false }
 };
+
+/** Mobile: fit the screen, extend into the notch area, purple browser bar on Android. */
+export const viewport = { width: 'device-width', initialScale: 1, viewportFit: 'cover', themeColor: '#5b21b6' };
 
 export default function RootLayout({ children }) {
   return (

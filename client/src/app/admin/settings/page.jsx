@@ -12,7 +12,7 @@ import { useApiMutation } from '@/hooks/useApiMutation';
 import { cn, humanize } from '@/lib/utils';
 
 const KEY = ['admin', 'settings'];
-const TESTABLE = ['email', 'whatsapp', 'zoom', 'storage'];
+const TESTABLE = ['email', 'whatsapp', 'zoom', 'storage', 'woocommerce'];
 
 /**
  * Platform settings grouped like the API (general, payment, email, whatsapp,

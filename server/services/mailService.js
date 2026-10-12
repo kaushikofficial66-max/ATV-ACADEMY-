@@ -32,14 +32,14 @@ const layout = async (title, bodyHtml) => {
   return `<!doctype html><html><body style="margin:0;background:#f4f5f7;font-family:Arial,Helvetica,sans-serif;color:#1f2933">
   <table width="100%" cellpadding="0" cellspacing="0" style="padding:24px 0"><tr><td align="center">
   <table width="600" cellpadding="0" cellspacing="0" style="background:#fff;border-radius:8px;overflow:hidden">
-  <tr><td style="background:#1e3a8a;color:#fff;padding:18px 24px;font-size:20px;font-weight:bold">${escapeHtml(siteName)}</td></tr>
+  <tr><td style="background:#5b21b6;color:#fff;padding:18px 24px;font-size:20px;font-weight:bold">${escapeHtml(siteName)}</td></tr>
   <tr><td style="padding:24px"><h2 style="margin-top:0;font-size:18px">${escapeHtml(title)}</h2>${bodyHtml}</td></tr>
   <tr><td style="padding:16px 24px;font-size:12px;color:#7b8794;border-top:1px solid #e4e7eb">This email was sent by ${escapeHtml(siteName)}.</td></tr>
   </table></td></tr></table></body></html>`;
 };
 
 const button = (url, label) =>
-  `<p style="margin:24px 0"><a href="${escapeHtml(url)}" style="background:#1e3a8a;color:#fff;padding:12px 20px;border-radius:6px;text-decoration:none;display:inline-block">${escapeHtml(label)}</a></p>
+  `<p style="margin:24px 0"><a href="${escapeHtml(url)}" style="background:#5b21b6;color:#fff;padding:12px 20px;border-radius:6px;text-decoration:none;display:inline-block">${escapeHtml(label)}</a></p>
    <p style="font-size:12px;color:#7b8794">If the button does not work, copy this link into your browser:<br>${escapeHtml(url)}</p>`;
 
 /**

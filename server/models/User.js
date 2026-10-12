@@ -34,6 +34,10 @@ User.init(
       type: DataTypes.STRING(20),
       allowNull: true
     },
+    woocommerce_customer_id: {
+      type: DataTypes.BIGINT.UNSIGNED,
+      allowNull: true
+    },
     password_hash: {
       type: DataTypes.STRING(255),
       allowNull: false
