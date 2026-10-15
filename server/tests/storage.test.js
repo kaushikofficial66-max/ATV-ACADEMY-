@@ -24,6 +24,8 @@ if (!/_test$/.test(process.env.DB_NAME || '')) {
 }
 
 process.env.NODE_ENV = 'test';
+// The developer .env may hold the REAL store keys: tests must never see them.
+for (const key of ['WOOCOMMERCE_ENABLED', 'WOOCOMMERCE_URL', 'WOOCOMMERCE_CONSUMER_KEY', 'WOOCOMMERCE_CONSUMER_SECRET', 'WOOCOMMERCE_WEBHOOK_SECRET', 'WOOCOMMERCE_PAID_STATUSES']) process.env[key] = '';
 // Keep test uploads out of the real uploads/ folder.
 process.env.UPLOAD_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'atv-test-uploads-'));
 process.env.DISABLE_SCHEDULER = 'true';
@@ -94,7 +96,7 @@ const startVimeoFake = () =>
       if (req.headers.authorization !== 'bearer vimeo-token') return json(res, 401, { error: 'Unauthorized', developer_message: 'invalid token' });
 
       if (req.method === 'GET' && url.pathname === '/oauth/verify') {
-        return json(res, 200, { scope: 'public private create edit delete upload video_files', user: { name: 'ATV', account: 'standard', upload_quota: { space: { free: 1e12 } } } });
+        return json(res, 200, { scope: 'public private create edit delete interact upload video_files', user: { name: 'ATV', account: 'standard', upload_quota: { space: { free: 1e12 } } } });
       }
       if (req.method === 'POST' && url.pathname === '/me/videos') {
         const payload = JSON.parse(body.toString());

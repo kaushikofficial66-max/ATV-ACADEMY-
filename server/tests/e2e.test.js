@@ -18,6 +18,8 @@ import { fileURLToPath } from 'node:url';
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 
 process.env.NODE_ENV = 'test';
+// The developer .env may hold the REAL store keys: tests must never see them.
+for (const key of ['WOOCOMMERCE_ENABLED', 'WOOCOMMERCE_URL', 'WOOCOMMERCE_CONSUMER_KEY', 'WOOCOMMERCE_CONSUMER_SECRET', 'WOOCOMMERCE_WEBHOOK_SECRET', 'WOOCOMMERCE_PAID_STATUSES']) process.env[key] = '';
 // Keep test uploads out of the real uploads/ folder.
 process.env.UPLOAD_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'atv-test-uploads-'));
 process.env.DISABLE_SCHEDULER = 'true';

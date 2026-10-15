@@ -32,7 +32,8 @@ import {
   Notification,
   LectureProgress,
   ProgressActivity,
-  RecordedVideo
+  RecordedVideo,
+  LiveClassTutor
 } from '../../models/index.js';
 import { successResponse } from '../../utils/apiResponse.js';
 import ApiError from '../../utils/ApiError.js';
@@ -427,7 +428,8 @@ export const listTutors = async (req, res) => {
     attributes: [
       ...BASE_ATTRS,
       [literal('(SELECT COUNT(*) FROM course_tutors ct WHERE ct.tutor_id = `User`.`id`)'), 'course_count'],
-      [literal("(SELECT COUNT(DISTINCT e.user_id) FROM course_tutors ct JOIN enrollments e ON e.course_id = ct.course_id WHERE ct.tutor_id = `User`.`id` AND e.status IN ('active','completed'))"), 'student_count']
+      [literal("(SELECT COUNT(DISTINCT e.user_id) FROM course_tutors ct JOIN enrollments e ON e.course_id = ct.course_id WHERE ct.tutor_id = `User`.`id` AND e.status IN ('active','completed'))"), 'student_count'],
+      [literal("(SELECT COUNT(*) FROM live_classes lc WHERE lc.status = 'completed' AND (lc.tutor_id = `User`.`id` OR lc.id IN (SELECT live_class_id FROM live_class_tutors WHERE tutor_id = `User`.`id`)))"), 'classes_taken']
     ],
     include: [roleInclude('tutor'), { model: UserProfile, as: 'profile', attributes: ['bio', 'city', 'country', 'linkedin_url', 'website'] }],
     order: getSort(req.query, ['created_at', 'first_name', 'email', 'last_login_at']),
@@ -438,16 +440,104 @@ export const listTutors = async (req, res) => {
   return successResponse(res, { data: { tutors: rows }, meta: meta(count) });
 };
 
-/** GET /admin/tutors/:tutorId - profile, courses, students, earnings, payouts. */
+/**
+ * Everything a tutor has done, for the admin "More info" view: sign-in activity and devices, live classes taken
+ * (hours, attendance, recordings), what they review and publish, and how students rate their courses.
+ * A tutor counts for a live class when they are its host (live_classes.tutor_id) or a co-tutor.
+ */
+const getTutorActivity = async (tutor, courseIds) => {
+  const tid = tutor.id;
+  const q = (sql, replacements = {}) => sequelize.query(sql, { replacements: { tid, courseIds: courseIds.length ? courseIds : [0], ...replacements }, type: 'SELECT' });
+  const mine = '(lc.tutor_id = :tid OR lc.id IN (SELECT live_class_id FROM live_class_tutors WHERE tutor_id = :tid))';
+
+  const [sessions, sessionCount, lastLogout, classStats, recentClasses, monthly, reviewed, videos, ratings, comments, posts, certificates, enrolled, completed] = await Promise.all([
+    UserSession.findAll({ where: { user_id: tid }, attributes: { exclude: ['user_agent'] }, order: [['login_at', 'DESC']], limit: 30 }),
+    UserSession.count({ where: { user_id: tid } }),
+    UserSession.findOne({ where: { user_id: tid, logout_at: { [Op.ne]: null } }, order: [['logout_at', 'DESC']], attributes: ['logout_at'] }),
+    q(`SELECT COUNT(*) AS total,
+         SUM(lc.status = 'completed') AS completed, SUM(lc.status = 'cancelled') AS cancelled,
+         SUM(lc.status IN ('scheduled','live') AND lc.scheduled_end >= NOW()) AS upcoming,
+         SUM(lc.status = 'completed' AND lc.recording_status = 'uploaded') AS recorded,
+         COALESCE(SUM(CASE WHEN lc.status = 'completed' THEN TIMESTAMPDIFF(MINUTE, lc.scheduled_start, lc.scheduled_end) END), 0) AS minutes_taught,
+         MAX(CASE WHEN lc.status = 'completed' THEN lc.scheduled_start END) AS last_class_at,
+         MIN(CASE WHEN lc.status IN ('scheduled','live') AND lc.scheduled_end >= NOW() THEN lc.scheduled_start END) AS next_class_at
+       FROM live_classes lc WHERE ${mine}`),
+    q(`SELECT lc.id, lc.title, lc.status, lc.scheduled_start, lc.scheduled_end, lc.recording_status, c.title AS course_title,
+         (SELECT COUNT(*) FROM live_class_participants p WHERE p.live_class_id = lc.id) AS registered,
+         (SELECT COUNT(*) FROM live_class_participants p WHERE p.live_class_id = lc.id AND p.attendance_status = 'joined') AS joined
+       FROM live_classes lc LEFT JOIN courses c ON c.id = lc.course_id WHERE ${mine} ORDER BY lc.scheduled_start DESC LIMIT 25`),
+    q(`SELECT DATE_FORMAT(lc.scheduled_start, '%Y-%m') AS month, COUNT(*) AS classes,
+         ROUND(SUM(TIMESTAMPDIFF(MINUTE, lc.scheduled_start, lc.scheduled_end)) / 60, 1) AS hours
+       FROM live_classes lc WHERE ${mine} AND lc.status = 'completed' AND lc.scheduled_start >= DATE_SUB(NOW(), INTERVAL 6 MONTH)
+       GROUP BY month ORDER BY month DESC`),
+    q(`SELECT COUNT(*) AS total, SUM(status = 'approved') AS approved, SUM(status = 'rejected') AS rejected, MAX(reviewed_at) AS last_reviewed_at
+       FROM project_submissions WHERE reviewed_by = :tid`).catch(() => [{}]),
+    RecordedVideo.count({ where: { uploaded_by: tid } }),
+    q('SELECT COUNT(*) AS total, ROUND(AVG(rating), 2) AS average FROM reviews WHERE course_id IN (:courseIds)').catch(() => [{}]),
+    CommunityComment.count({ where: { user_id: tid, status: { [Op.ne]: 'deleted' } } }),
+    CommunityPost.count({ where: { user_id: tid, status: { [Op.ne]: 'deleted' } } }),
+    Certificate.count({ where: { course_id: { [Op.in]: courseIds } } }),
+    Enrollment.count({ where: { course_id: { [Op.in]: courseIds }, status: { [Op.in]: ['active', 'completed'] } } }),
+    Enrollment.count({ where: { course_id: { [Op.in]: courseIds }, status: 'completed' } })
+  ]);
+
+  const cs = classStats[0] || {};
+  const lastSeen = sessions.reduce((max, x) => (!max || new Date(x.last_seen_at) > new Date(max) ? x.last_seen_at : max), null);
+  const n = (v) => Number(v || 0);
+  return {
+    account_status: tutor.status,
+    joined_at: tutor.createdAt || tutor.get('created_at'),
+    last_login_at: tutor.last_login_at,
+    last_logout_at: lastLogout?.logout_at || null,
+    last_seen_at: lastSeen,
+    is_online: Boolean(lastSeen && Date.now() - new Date(lastSeen).getTime() < ONLINE_WINDOW_MS && sessions.some((x) => !x.logout_at)),
+    total_logins: sessionCount,
+    active_sessions: sessions.filter((x) => !x.logout_at).length,
+    logins_by_device: countBy(sessions, 'device_type'),
+    logins_by_os: countBy(sessions, 'os'),
+    logins_by_browser: countBy(sessions, 'browser'),
+    sessions,
+    classes: {
+      total: n(cs.total),
+      completed: n(cs.completed),
+      cancelled: n(cs.cancelled),
+      upcoming: n(cs.upcoming),
+      recorded: n(cs.recorded),
+      hours_taught: Math.round((n(cs.minutes_taught) / 60) * 10) / 10,
+      last_class_at: cs.last_class_at || null,
+      next_class_at: cs.next_class_at || null,
+      by_month: monthly,
+      recent: recentClasses.map((c) => ({ ...c, registered: n(c.registered), joined: n(c.joined) }))
+    },
+    teaching: {
+      students_enrolled: enrolled,
+      students_completed: completed,
+      completion_rate: enrolled ? Math.round((completed / enrolled) * 100) : null,
+      certificates_issued: certificates,
+      projects_reviewed: n(reviewed[0]?.total),
+      projects_approved: n(reviewed[0]?.approved),
+      projects_rejected: n(reviewed[0]?.rejected),
+      last_project_review_at: reviewed[0]?.last_reviewed_at || null,
+      videos_uploaded: videos,
+      reviews_received: n(ratings[0]?.total),
+      average_rating: ratings[0]?.average === null || ratings[0]?.average === undefined ? null : Number(ratings[0].average),
+      community_posts: posts,
+      community_comments: comments
+    }
+  };
+};
+
+/** GET /admin/tutors/:tutorId - profile, courses, students, earnings, payouts, activity. */
 export const getTutorDetails = async (req, res) => {
   const tutor = await findUserWithRole(req.params.tutorId, 'tutor');
   const assignments = await CourseTutor.findAll({ where: { tutor_id: tutor.id }, attributes: ['course_id', 'is_primary'] });
   const courses = await Course.findAll({ where: { id: { [Op.in]: assignments.map((a) => a.course_id) } }, attributes: ['id', 'title', 'slug', 'status', 'price', 'discount_price', 'thumbnail_url', 'created_at'] });
-  const [decorated, earnings, upcoming, payouts] = await Promise.all([
+  const [decorated, earnings, upcoming, payouts, activity] = await Promise.all([
     decorateCourses(courses),
     getTutorEarnings(tutor.id),
     LiveClass.count({ where: { tutor_id: tutor.id, status: { [Op.in]: ['scheduled', 'live'] }, scheduled_end: { [Op.gte]: new Date() } } }),
-    TutorPayout.findAll({ where: { tutor_id: tutor.id }, order: [['created_at', 'DESC']], limit: 10 })
+    TutorPayout.findAll({ where: { tutor_id: tutor.id }, order: [['created_at', 'DESC']], limit: 10 }),
+    getTutorActivity(tutor, assignments.map((a) => a.course_id))
   ]);
   return successResponse(res, {
     data: {
@@ -460,7 +550,8 @@ export const getTutorDetails = async (req, res) => {
         upcoming_live_classes: upcoming
       },
       earnings,
-      recent_payouts: payouts
+      recent_payouts: payouts,
+      activity
     }
   });
 };

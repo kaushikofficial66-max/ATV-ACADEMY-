@@ -11,6 +11,7 @@ import * as live from '../controllers/student/liveClassController.js';
 import * as certificate from '../controllers/student/certificateController.js';
 import * as commerce from '../controllers/student/commerceController.js';
 import * as review from '../controllers/student/reviewController.js';
+import * as locked from '../controllers/student/lockedCourseController.js';
 
 // Student panel. Learning endpoints also accept tutors/admins (course preview);
 // commerce endpoints are student-only.
@@ -21,6 +22,11 @@ const studentOnly = authorize('student');
 
 // Dashboard
 router.get('/dashboard', studentOnly, getDashboard);
+
+// Courses of other store plans, shown locked with a button to buy them (Razorpay)
+router.get('/locked-courses', studentOnly, locked.listLockedCourses);
+router.get('/locked-courses/:courseId', validateIdParams, studentOnly, locked.getLockedCourse);
+router.post('/locked-courses/:courseId/unlock', validateIdParams, studentOnly, locked.unlockCourse);
 
 // My courses & course learning
 router.get('/courses', learning.getMyCourses);

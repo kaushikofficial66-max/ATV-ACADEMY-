@@ -4,6 +4,7 @@ import { LiveClass, Course, Enrollment, Coupon, Order, Payment } from '../models
 import { notifyUsers, getCourseStudentIds } from './notificationService.js';
 import { markAbsentees } from './liveClassService.js';
 import { syncProcessingVideos } from './videoService.js';
+import { processPendingRecordings } from './liveClassRecordingService.js';
 import { getStorageDriver } from './storageDriver.js';
 import { isVimeoConfigured } from './vimeoService.js';
 import { isR2Configured } from './r2Service.js';
@@ -98,6 +99,8 @@ export const startScheduler = () => {
   cron.schedule('30 3 * * *', safely('cancel-stale-orders', cancelStaleOrders));
   // Picks up Vimeo transcoding results (Vimeo videos start as "processing").
   cron.schedule('*/5 * * * *', safely('sync-vimeo-videos', syncProcessingVideos));
+  // Live class recordings: Zoom cloud -> Vimeo, once a class has ended and Zoom has processed the recording.
+  cron.schedule('*/5 * * * *', safely('live-class-recordings', processPendingRecordings));
   // Re-syncs WooCommerce orders modified since the last run (missed / failed webhooks).
   cron.schedule('*/10 * * * *', safely('woocommerce-reconcile', reconcileRecentOrders));
   // Course price / publish status from linked store products (backs up the product webhook).

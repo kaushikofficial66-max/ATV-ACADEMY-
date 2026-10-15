@@ -1,7 +1,7 @@
 'use client';
 
 import { useQueryClient } from '@tanstack/react-query';
-import { toast } from 'sonner';
+import { toast } from 'react-toastify';
 import { post, getErrorMessage } from '@/lib/api/client';
 import { EP } from '@/lib/api/endpoints';
 import { Button, PageHeader, StatusBadge } from '@/components/ui';
@@ -9,11 +9,13 @@ import ResourceList from '@/components/data/ResourceList';
 import { useApiMutation } from '@/hooks/useApiMutation';
 import { payWithRazorpay } from '@/features/commerce/razorpay';
 import { formatDateTime, formatPrice } from '@/lib/utils';
+import { useConfirm } from '@/components/feedback/ConfirmProvider';
 
 const KEY = ['student', 'orders'];
 
 export default function OrdersPage() {
   const queryClient = useQueryClient();
+  const ask = useConfirm();
   const cancel = useApiMutation((id) => post(EP.student.cancelOrder(id)), { invalidate: [KEY] });
 
   const retry = async (order) => {
@@ -62,7 +64,7 @@ export default function OrdersPage() {
                     <Button size="sm" onClick={() => retry(o)}>
                       Pay now
                     </Button>
-                    <Button size="sm" variant="ghost" onClick={() => cancel.mutate(o.id)}>
+                    <Button size="sm" variant="ghost" onClick={async () => (await ask({ title: 'Cancel this order?', message: 'The order will be cancelled.', confirmLabel: 'Cancel order', cancelLabel: 'Keep order', tone: 'warning' })) && cancel.mutate(o.id)}>
                       Cancel
                     </Button>
                   </div>

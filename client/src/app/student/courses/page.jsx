@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
-import { GraduationCap } from 'lucide-react';
+import { GraduationCap, Lock } from 'lucide-react';
 import { get } from '@/lib/api/client';
 import { EP } from '@/lib/api/endpoints';
 import { Card, PageHeader, Pagination } from '@/components/ui';
@@ -10,6 +10,7 @@ import { QueryState, EmptyState } from '@/components/feedback/States';
 import { Loader } from '@/components/feedback/Loader';
 import { learningKeys } from '@/features/learning/keys';
 import CourseTile from '@/features/learning/CourseTile';
+import LockedCourseTile from '@/features/learning/LockedCourseTile';
 import { cn, fullName } from '@/lib/utils';
 
 const FILTERS = [
@@ -28,6 +29,10 @@ export default function MyCoursesPage() {
     queryFn: () => get(EP.student.courses, params),
     placeholderData: keepPreviousData
   });
+
+  // Courses of the other store plans: visible but locked (only for students who bought a plan).
+  const locked = useQuery({ queryKey: learningKeys.locked, queryFn: () => get(EP.student.lockedCourses).then((r) => r.data) });
+  const lockedCourses = locked.data?.is_plan_buyer ? locked.data.courses : [];
 
   return (
     <>
@@ -87,6 +92,27 @@ export default function MyCoursesPage() {
           )
         }
       </QueryState>
+
+      {lockedCourses.length > 0 && (
+        <section className="mt-10" aria-labelledby="locked-heading">
+          <div className="mb-4 flex items-start gap-3">
+            <span className="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-full bg-amber-100 text-amber-700">
+              <Lock className="size-4" aria-hidden />
+            </span>
+            <div>
+              <h2 id="locked-heading" className="text-lg font-semibold text-slate-900">
+                More courses you can unlock
+              </h2>
+              <p className="text-sm text-slate-500">These are part of other plans. Buy a course on its own, or upgrade your plan, to open it.</p>
+            </div>
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2 sm:gap-6 xl:grid-cols-3">
+            {lockedCourses.map((c) => (
+              <LockedCourseTile key={c.id} course={c} />
+            ))}
+          </div>
+        </section>
+      )}
     </>
   );
 }

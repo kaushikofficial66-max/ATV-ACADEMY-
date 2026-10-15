@@ -9,6 +9,7 @@ import { Button, PageHeader, StatusBadge } from '@/components/ui';
 import ResourceList from '@/components/data/ResourceList';
 import { useApiMutation } from '@/hooks/useApiMutation';
 import { formatDate, fullName } from '@/lib/utils';
+import { useConfirm } from '@/components/feedback/ConfirmProvider';
 
 const KEY = ['admin', 'reviews'];
 
@@ -21,6 +22,7 @@ export default function AdminReviewsPage() {
 }
 
 function ReviewsList() {
+  const ask = useConfirm();
   const params = useSearchParams();
   const moderate = useApiMutation(({ id, status }) => patch(EP.admin.reviewModerate(id), { status }), { invalidate: [KEY, ['admin', 'dashboard']] });
   const remove = useApiMutation((id) => del(`${EP.admin.reviews}/${id}`), { invalidate: [KEY] });
@@ -64,11 +66,11 @@ function ReviewsList() {
                   </Button>
                 )}
                 {r.status !== 'rejected' && (
-                  <Button size="sm" variant="ghost" onClick={() => moderate.mutate({ id: r.id, status: 'rejected' })}>
+                  <Button size="sm" variant="ghost" onClick={async () => (await ask({ title: 'Reject this review?', message: 'It will not be shown publicly.', confirmLabel: 'Reject' })) && moderate.mutate({ id: r.id, status: 'rejected' })}>
                     Reject
                   </Button>
                 )}
-                <Button size="sm" variant="ghost" onClick={() => confirm('Delete this review?') && remove.mutate(r.id)}>
+                <Button size="sm" variant="ghost" onClick={async () => (await ask({ title: 'Delete review?', message: 'This review will be deleted.', confirmLabel: 'Delete' })) && remove.mutate(r.id)}>
                   Delete
                 </Button>
               </div>

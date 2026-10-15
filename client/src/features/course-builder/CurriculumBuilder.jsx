@@ -12,6 +12,7 @@ import { Loader } from '@/components/feedback/Loader';
 import { useApiMutation } from '@/hooks/useApiMutation';
 import { builderKeys } from './keys';
 import { formatDuration, humanize } from '@/lib/utils';
+import { useConfirm } from '@/components/feedback/ConfirmProvider';
 
 const LECTURE_TYPES = ['video', 'text', 'document', 'quiz', 'live_class'];
 
@@ -19,6 +20,7 @@ const LECTURE_TYPES = ['video', 'text', 'document', 'quiz', 'live_class'];
 export default function CurriculumBuilder({ role, courseId }) {
   const m = manage(role);
   const key = builderKeys.curriculum(role, courseId);
+  const ask = useConfirm();
   const query = useQuery({ queryKey: key, queryFn: () => get(m.curriculum(courseId)).then((r) => r.data.sections) });
   const [sectionModal, setSectionModal] = useState(null); // {} new | section
   const [lectureModal, setLectureModal] = useState(null); // { sectionId, lecture? }
@@ -72,7 +74,7 @@ export default function CurriculumBuilder({ role, courseId }) {
                     </p>
                     {s.status !== 'active' && <StatusBadge status={s.status} />}
                     <IconBtn label="Edit section" onClick={() => setSectionModal(s)}><Pencil className="size-4" /></IconBtn>
-                    <IconBtn label="Delete section" onClick={() => confirm(`Delete section "${s.title}" and its lectures?`) && deleteSection.mutate(s.id)}><Trash2 className="size-4" /></IconBtn>
+                    <IconBtn label="Delete section" onClick={async () => (await ask({ title: 'Delete section?', message: `"${s.title}" and all its lectures will be deleted.`, confirmLabel: 'Delete' })) && deleteSection.mutate(s.id)}><Trash2 className="size-4" /></IconBtn>
                   </div>
                   <ul className="divide-y divide-slate-100">
                     {s.lectures.map((l, li) => (
@@ -93,7 +95,7 @@ export default function CurriculumBuilder({ role, courseId }) {
                           <span className="text-xs text-amber-700">No video</span>
                         ) : null}
                         <IconBtn label="Edit lecture" onClick={() => setLectureModal({ sectionId: s.id, lecture: l })}><Pencil className="size-4" /></IconBtn>
-                        <IconBtn label="Delete lecture" onClick={() => confirm(`Delete lecture "${l.title}"?`) && deleteLecture.mutate(l.id)}><Trash2 className="size-4" /></IconBtn>
+                        <IconBtn label="Delete lecture" onClick={async () => (await ask({ title: 'Delete lecture?', message: `"${l.title}" will be deleted.`, confirmLabel: 'Delete' })) && deleteLecture.mutate(l.id)}><Trash2 className="size-4" /></IconBtn>
                       </li>
                     ))}
                   </ul>

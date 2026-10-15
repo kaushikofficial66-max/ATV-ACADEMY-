@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
-import { Award, BookOpen, CalendarClock, CircleCheck, GraduationCap, PlayCircle, TrendingUp } from 'lucide-react';
+import { Award, BookOpen, CalendarClock, CircleCheck, GraduationCap, Lock, PlayCircle, TrendingUp } from 'lucide-react';
 import { get } from '@/lib/api/client';
 import { EP } from '@/lib/api/endpoints';
 import { Card, CardHeader, ProgressBar, ProgressRing, StatCard } from '@/components/ui';
@@ -10,6 +10,8 @@ import { QueryState, EmptyState } from '@/components/feedback/States';
 import { Loader } from '@/components/feedback/Loader';
 import { useAuth } from '@/features/auth/AuthProvider';
 import CourseTile from '@/features/learning/CourseTile';
+import LockedCourseTile from '@/features/learning/LockedCourseTile';
+import { learningKeys } from '@/features/learning/keys';
 import { formatDateTime } from '@/lib/utils';
 
 const greeting = () => {
@@ -20,6 +22,9 @@ const greeting = () => {
 export default function StudentDashboardPage() {
   const { user } = useAuth();
   const query = useQuery({ queryKey: ['student', 'dashboard'], queryFn: () => get(EP.student.dashboard).then((r) => r.data) });
+  // Courses of the other store plans: shown locked, each with its own "Unlock" button.
+  const locked = useQuery({ queryKey: learningKeys.locked, queryFn: () => get(EP.student.lockedCourses).then((r) => r.data) });
+  const lockedCourses = locked.data?.is_plan_buyer ? locked.data.courses : [];
 
   return (
     <QueryState query={query} loading={<Loader />}>
@@ -47,7 +52,7 @@ export default function StudentDashboardPage() {
                       <ProgressRing value={resume.completion_percentage} size={64} stroke={6} />
                       <div className="min-w-0 flex-1">
                         <p className="line-clamp-2 font-semibold leading-snug">{resume.course.title}</p>
-                        <ProgressBar value={resume.completion_percentage} className="mt-2" />
+                        {/* <ProgressBar value={resume.completion_percentage} className="mt-2" /> */}
                       </div>
                     </div>
                     <Link
@@ -128,6 +133,31 @@ export default function StudentDashboardPage() {
                 </Card>
               </aside>
             </div>
+
+            {/* More courses to buy */}
+            {lockedCourses.length > 0 && (
+              <section aria-labelledby="more-courses">
+                <div className="mb-4 flex items-start gap-3">
+                  <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-amber-100 text-amber-700">
+                    <Lock className="size-4" aria-hidden />
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <h2 id="more-courses" className="text-lg font-semibold text-slate-900">More courses you can unlock</h2>
+                    <p className="text-sm text-slate-500">These are part of other plans. Buy a course on its own, or upgrade your plan, to open it.</p>
+                  </div>
+                  {locked.data?.plans_url && (
+                    <a href={locked.data.plans_url} target="_blank" rel="noopener noreferrer" className="shrink-0 text-sm font-medium text-brand-700 hover:underline">
+                      See plans
+                    </a>
+                  )}
+                </div>
+                <div className="grid gap-6 sm:grid-cols-2 xl:grid-cols-3">
+                  {lockedCourses.map((c) => (
+                    <LockedCourseTile key={c.id} course={c} />
+                  ))}
+                </div>
+              </section>
+            )}
           </div>
         );
       }}

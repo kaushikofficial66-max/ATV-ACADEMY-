@@ -6,10 +6,12 @@ import { Badge, Button, PageHeader, StatusBadge } from '@/components/ui';
 import ResourceList from '@/components/data/ResourceList';
 import { useApiMutation } from '@/hooks/useApiMutation';
 import { formatDateTime, fullName } from '@/lib/utils';
+import { useConfirm } from '@/components/feedback/ConfirmProvider';
 
 const KEY = ['admin', 'community'];
 
 export default function AdminCommunityPage() {
+  const ask = useConfirm();
   const moderate = useApiMutation(({ id, status }) => patch(EP.admin.communityPostStatus(id), { status }), { invalidate: [KEY] });
 
   return (
@@ -59,7 +61,7 @@ export default function AdminCommunityPage() {
                   </Button>
                 )}
                 {p.status !== 'deleted' && (
-                  <Button size="sm" variant="ghost" onClick={() => confirm('Delete this post?') && moderate.mutate({ id: p.id, status: 'deleted' })}>
+                  <Button size="sm" variant="ghost" onClick={async () => (await ask({ title: 'Delete post?', message: 'This post will be removed from the community.', confirmLabel: 'Delete' })) && moderate.mutate({ id: p.id, status: 'deleted' })}>
                     Delete
                   </Button>
                 )}

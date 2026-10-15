@@ -10,11 +10,13 @@ import Modal from '@/components/ui/Modal';
 import ResourceList from '@/components/data/ResourceList';
 import { useApiMutation } from '@/hooks/useApiMutation';
 import { formatDate, formatPrice, fullName } from '@/lib/utils';
+import { useConfirm } from '@/components/feedback/ConfirmProvider';
 
 const KEY = ['admin', 'payouts'];
 
 export default function AdminPayoutsPage() {
   const [creating, setCreating] = useState(false);
+  const ask = useConfirm();
   const update = useApiMutation(({ id, ...body }) => patch(EP.admin.payout(id), body), { invalidate: [KEY] });
 
   return (
@@ -46,10 +48,13 @@ export default function AdminPayoutsPage() {
             render: (p) =>
               ['pending', 'processing'].includes(p.status) && (
                 <div className="flex justify-end gap-1">
-                  <Button size="sm" onClick={() => update.mutate({ id: p.id, status: 'paid', transaction_reference: prompt('Transaction reference?') || undefined })}>
+                  <Button size="sm" onClick={async () => {
+                      const r = await ask({ title: 'Mark payout as paid?', message: 'Record that this payout has been sent.', confirmLabel: 'Mark paid', tone: 'primary', input: { label: 'Transaction reference (optional)' } });
+                      if (r) update.mutate({ id: p.id, status: 'paid', transaction_reference: r.value || undefined });
+                    }}>
                     Mark paid
                   </Button>
-                  <Button size="sm" variant="ghost" onClick={() => update.mutate({ id: p.id, status: 'cancelled' })}>
+                  <Button size="sm" variant="ghost" onClick={async () => (await ask({ title: 'Cancel payout?', message: 'This payout will be cancelled.', confirmLabel: 'Cancel payout', cancelLabel: 'Go back', tone: 'warning' })) && update.mutate({ id: p.id, status: 'cancelled' })}>
                     Cancel
                   </Button>
                 </div>

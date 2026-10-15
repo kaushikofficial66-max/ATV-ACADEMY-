@@ -31,32 +31,30 @@ export default function CourseLearnPage({ params }) {
             </Link>
 
             {/* Course header */}
-            <section className="flex flex-col gap-4 rounded-2xl bg-gradient-to-br from-brand-800 via-brand-700 to-brand-500 p-5 text-white shadow-lg shadow-brand-900/10 sm:flex-row sm:items-center sm:justify-between sm:gap-5 sm:rounded-3xl sm:p-8">
+            <section className="flex flex-col gap-4 rounded-2xl border border-white/15 bg-slate-950/50 p-5 text-white shadow-xl shadow-black/10 backdrop-blur-xl sm:flex-row sm:items-center sm:justify-between sm:gap-5 sm:rounded-3xl sm:p-8">
               <div className="min-w-0">
-                <h1 className="text-xl font-bold leading-tight tracking-tight sm:text-3xl">{d.course.title}</h1>
-                <p className="mt-2 text-sm text-brand-100">
-                  {d.is_staff_preview ? 'Staff preview - progress is not tracked' : d.progress?.total_lectures ? `${d.progress.completed_lectures} of ${d.progress.total_lectures} lectures completed` : 'Welcome to your course'}
+                <h1 className="text-xl font-bold leading-tight tracking-tight sm:text-3xl">
+                  {d.course.title}
+                </h1>
+
+                <p className="mt-2 text-sm text-white/70">
+                  {d.is_staff_preview
+                    ? 'Staff preview - progress is not tracked'
+                    : d.progress?.total_lectures
+                      ? `${d.progress.completed_lectures} of ${d.progress.total_lectures} lectures completed`
+                      : 'Welcome to your course'}
                 </p>
+
                 {resumeId && (
                   <Link
                     href={`/student/learn/${courseId}/lecture/${resumeId}`}
-                    className="mt-4 inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-white px-6 text-sm font-semibold text-brand-800 shadow-lg shadow-black/10 transition hover:bg-brand-50 sm:mt-5 sm:h-12 sm:w-auto"
+                    className="mt-4 inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl border border-white/20 bg-white/95 px-6 text-sm font-semibold text-slate-900 shadow-lg transition-all duration-300 hover:bg-white hover:shadow-white/10 sm:mt-5 sm:h-12 sm:w-auto"
                   >
-                    <PlayCircle className="size-5" aria-hidden /> {pct > 0 ? 'Continue learning' : 'Start course'}
+                    <PlayCircle className="size-5" aria-hidden />
+                    {pct > 0 ? 'Continue learning' : 'Start course'}
                   </Link>
                 )}
               </div>
-              {d.progress && (
-                <div className="flex items-center gap-4 rounded-2xl bg-white/10 p-4 ring-1 ring-white/20">
-                  <ProgressRing value={pct} size={84} stroke={8} className="[&_circle:first-child]:stroke-white/20 [&_circle:last-child]:stroke-white [&_span]:text-white" />
-                  <div>
-                    <p className="text-xs font-medium uppercase tracking-wide text-brand-100">Your progress</p>
-                    <div className="mt-1">
-                      <StatusBadge status={d.progress.status} label={d.progress.status_label} />
-                    </div>
-                  </div>
-                </div>
-              )}
             </section>
 
             <div className="grid gap-6 lg:grid-cols-3">

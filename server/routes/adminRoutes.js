@@ -7,6 +7,7 @@ import * as users from '../controllers/admin/adminUserController.js';
 import * as courses from '../controllers/admin/adminCourseController.js';
 import * as commerce from '../controllers/admin/adminCommerceController.js';
 import * as content from '../controllers/admin/adminContentController.js';
+import * as storePlans from '../controllers/admin/adminStorePlanController.js';
 import { revokeCertificate, generateCertificate } from '../controllers/shared/certificateManageController.js';
 import { buildManagementRouter } from './managementRoutes.js';
 
@@ -74,6 +75,13 @@ router.post('/woocommerce/orders/:wcOrderId/sync', id, commerce.syncWooCommerceO
 router.post('/woocommerce/reconcile', commerce.reconcileWooCommerce);
 router.post('/woocommerce/products/sync', commerce.syncCourseProducts);
 router.post('/courses/:courseId/woocommerce-product', id, commerce.createCourseProduct);
+
+// Store plans: one WooCommerce product -> several courses
+router.get('/store-plans', storePlans.listStorePlans);
+router.post('/store-plans', storePlans.createStorePlan);
+router.put('/store-plans/:planId', id, storePlans.updateStorePlan);
+router.delete('/store-plans/:planId', id, storePlans.deleteStorePlan);
+router.post('/store-plans/:planId/store-product', id, storePlans.createPlanStoreProduct);
 
 // Coupons
 router.get('/coupons', commerce.listCoupons);

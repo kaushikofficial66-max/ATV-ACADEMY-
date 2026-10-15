@@ -7,13 +7,15 @@ import ResourceList from '@/components/data/ResourceList';
 import { useApiMutation } from '@/hooks/useApiMutation';
 import { builderKeys } from '@/features/course-builder/keys';
 import { formatDate, fullName } from '@/lib/utils';
+import { useConfirm } from '@/components/feedback/ConfirmProvider';
 
 /** Certificates for tutor's courses (or all, for admins): approve, download, revoke. */
 export default function CertificatesManage({ role }) {
   const m = manage(role);
   const key = builderKeys.certificates(role);
+  const ask = useConfirm();
   const approve = useApiMutation((id) => post(m.certificateApprove(id)), { invalidate: [key] });
-  const revoke = useApiMutation((id) => post(EP.admin.certificateRevoke(id), { reason: prompt('Reason for revoking?') || undefined }), { invalidate: [key] });
+  const revoke = useApiMutation(({ id, reason }) => post(EP.admin.certificateRevoke(id), { reason }), { invalidate: [key] });
 
   return (
     <>
@@ -47,7 +49,10 @@ export default function CertificatesManage({ role }) {
                   </Button>
                 )}
                 {role === 'admin' && ['approved', 'issued'].includes(c.status) && (
-                  <Button size="sm" variant="ghost" onClick={() => confirm('Revoke this certificate?') && revoke.mutate(c.id)}>
+                  <Button size="sm" variant="ghost" onClick={async () => {
+                      const r = await ask({ title: 'Revoke certificate?', message: 'This certificate will be revoked.', confirmLabel: 'Revoke', input: { label: 'Reason (optional)' } });
+                      if (r) revoke.mutate({ id: c.id, reason: r.value || undefined });
+                    }}>
                     Revoke
                   </Button>
                 )}

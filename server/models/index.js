@@ -45,6 +45,9 @@ import OrderItem from './OrderItem.js';
 import Payment from './Payment.js';
 import Coupon from './Coupon.js';
 import CouponUsage from './CouponUsage.js';
+import StorePlan from './StorePlan.js';
+import StorePlanCourse from './StorePlanCourse.js';
+import StorePlanUpgrade from './StorePlanUpgrade.js';
 
 import Wishlist from './Wishlist.js';
 import Review from './Review.js';
@@ -176,6 +179,8 @@ Certificate.belongsTo(User, { foreignKey: 'approved_by', as: 'approver' });
 // 8. Live Classes (Zoom)
 // ==========================================
 LiveClass.belongsTo(Course, { foreignKey: 'course_id', as: 'course' });
+LiveClass.belongsTo(Lecture, { foreignKey: 'lecture_id', as: 'lecture', constraints: false });
+Lecture.hasOne(LiveClass, { foreignKey: 'lecture_id', as: 'liveClass', constraints: false });
 LiveClass.belongsTo(User, { foreignKey: 'tutor_id', as: 'tutor' });
 LiveClass.belongsToMany(User, { through: LiveClassTutor, foreignKey: 'live_class_id', otherKey: 'tutor_id', as: 'tutors' });
 LiveClass.hasMany(LiveClassTutor, { foreignKey: 'live_class_id', as: 'tutorAssignments' });
@@ -207,6 +212,12 @@ Payment.belongsTo(Order, { foreignKey: 'order_id', as: 'order' });
 Payment.belongsTo(User, { foreignKey: 'user_id', as: 'user' });
 
 Coupon.hasMany(CouponUsage, { foreignKey: 'coupon_id', as: 'usages' });
+
+// Store plans: one WooCommerce product -> several courses
+StorePlan.hasMany(StorePlanCourse, { foreignKey: 'plan_id', as: 'planCourses' });
+StorePlanCourse.belongsTo(StorePlan, { foreignKey: 'plan_id', as: 'plan' });
+StorePlanCourse.belongsTo(Course, { foreignKey: 'course_id', as: 'course' });
+Course.hasMany(StorePlanCourse, { foreignKey: 'course_id', as: 'planLinks' });
 CouponUsage.belongsTo(Coupon, { foreignKey: 'coupon_id', as: 'coupon' });
 CouponUsage.belongsTo(User, { foreignKey: 'user_id', as: 'user' });
 CouponUsage.belongsTo(Order, { foreignKey: 'order_id', as: 'order' });
@@ -341,6 +352,9 @@ export {
   Payment,
   Coupon,
   CouponUsage,
+  StorePlan,
+  StorePlanCourse,
+  StorePlanUpgrade,
   Wishlist,
   Review,
   CommunityPost,
@@ -395,6 +409,9 @@ export default {
   Payment,
   Coupon,
   CouponUsage,
+  StorePlan,
+  StorePlanCourse,
+  StorePlanUpgrade,
   Wishlist,
   Review,
   CommunityPost,

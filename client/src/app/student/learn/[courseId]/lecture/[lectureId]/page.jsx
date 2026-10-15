@@ -3,7 +3,7 @@
 import { use, useRef } from 'react';
 import Link from 'next/link';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { toast } from 'sonner';
+import { toast } from 'react-toastify';
 import { ArrowRight, ChevronLeft, ChevronRight, CircleCheck } from 'lucide-react';
 import { get, post } from '@/lib/api/client';
 import { EP } from '@/lib/api/endpoints';
@@ -16,6 +16,8 @@ import PlayerLayout from '@/features/learning/PlayerLayout';
 import LectureTabs from '@/features/learning/LectureTabs';
 import { progressHint } from '@/features/learning/ProgressSummary';
 import VideoPlayer from '@/features/videos/VideoPlayer';
+import LiveBadge from '@/features/learning/LiveBadge';
+import LiveLecturePanel from '@/features/learning/LiveLecturePanel';
 
 const SAVE_EVERY_SECONDS = 15;
 
@@ -90,6 +92,7 @@ export default function LecturePage({ params }) {
           <>
             <p className="mb-3 text-sm text-slate-600">
               <span className="font-semibold text-slate-900">Lecture:</span> {lecture.data.lecture.title}
+              {lecture.data.lecture.lecture_type === 'live_class' && <LiveBadge status={lecture.data.lecture.live_class?.status} className="ml-2 align-middle" />}
             </p>
 
             {lecture.data.video ? (
@@ -104,6 +107,8 @@ export default function LecturePage({ params }) {
                   onEnded={() => lecture.data.is_enrolled && saveProgress(true)}
                 />
               </div>
+            ) : lecture.data.lecture.lecture_type === 'live_class' ? (
+              <LiveLecturePanel liveClass={lecture.data.lecture.live_class} />
             ) : (
               <div className="flex aspect-video items-center justify-center rounded-xl border border-dashed border-slate-300 bg-white text-sm text-slate-500">
                 This lecture has no video. See the overview below.

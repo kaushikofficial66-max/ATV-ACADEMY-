@@ -4,7 +4,7 @@ import { useEffect } from 'react';
 import Link from 'next/link';
 import { Bell } from 'lucide-react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { toast } from 'sonner';
+import { toast } from 'react-toastify';
 import { notificationsApi, notificationKeys } from './api';
 import { getSocket } from '@/lib/socket';
 

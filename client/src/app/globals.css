@@ -79,3 +79,22 @@ body {
 }
 .sheet-up { animation: sheet-up 0.24s cubic-bezier(0.2, 0.8, 0.2, 1); }
 .fade-in { animation: fade-in 0.18s ease-out; }
+
+/* Toasts (react-toastify): follow the app font, keep clear of the phone's notch, compact on phones */
+.Toastify__toast-container {
+  font-family: inherit;
+}
+.Toastify__toast {
+  font-size: 0.875rem;
+  border-radius: 0.75rem;
+}
+@media (max-width: 480px) {
+  .Toastify__toast-container {
+    top: env(safe-area-inset-top);
+    padding: 0.5rem;
+  }
+  .Toastify__toast {
+    margin-bottom: 0.5rem;
+    min-height: 3rem;
+  }
+}

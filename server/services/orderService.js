@@ -149,13 +149,24 @@ export const getCartSummary = async (userId, couponCode = null) => {
   };
 };
 
+/** Pricing of a plan upgrade: the given amounts as they are (the price already includes everything). */
+const upgradePricing = (courses, amounts) => {
+  const items = courses.map((course) => {
+    const amount = toMoney(amounts.get(Number(course.id)) || 0);
+    return { course, price: amount, discount: 0, final: amount };
+  });
+  const total = toMoney(items.reduce((sum, i) => sum + i.final, 0));
+  return { items, subtotal: total, discount: 0, tax_percent: 0, tax: 0, total, coupon: null };
+};
+
 /**
  * Creates an order from the cart (or explicit course_ids for "Buy now").
  * Free orders are fulfilled immediately; paid orders get a Razorpay order.
  */
-export const createCheckoutOrder = async (user, { courseIds = null, couponCode = null }) => {
+export const createCheckoutOrder = async (user, { courseIds = null, couponCode = null, allowStore = false, upgrade = null }) => {
   // With WooCommerce in charge only free enrollments go through the LMS.
-  const storeOwnsCommerce = await isWooCommerceEnabled();
+  // allowStore: the "unlock a locked plan course" purchase (courseUnlockService) pays in the portal even then.
+  const storeOwnsCommerce = allowStore ? false : await isWooCommerceEnabled();
   if (storeOwnsCommerce && couponCode) throw await storePurchaseError();
   const storeError = storeOwnsCommerce ? await storePurchaseError() : null;
 
@@ -189,7 +200,8 @@ export const createCheckoutOrder = async (user, { courseIds = null, couponCode =
       throw ApiError.conflict(`You are already enrolled in: ${courses.filter((c) => ids.includes(c.id)).map((c) => c.title).join(', ')}`);
     }
 
-    const pricing = await priceCourses(courses, couponCode, { transaction });
+    // upgrade: { planId, amounts: Map(course_id -> amount) } - a plan upgrade at its own (all-inclusive) price, no coupon / tax.
+    const pricing = upgrade ? upgradePricing(courses, upgrade.amounts) : await priceCourses(courses, couponCode, { transaction });
     if (storeError && pricing.total > 0) throw storeError;
     const currency = await getSetting('currency');
 
@@ -214,7 +226,8 @@ export const createCheckoutOrder = async (user, { courseIds = null, couponCode =
         course_title: i.course.title,
         price: i.price,
         discount_amount: i.discount,
-        final_amount: i.final
+        final_amount: i.final,
+        store_plan_id: upgrade ? upgrade.planId : null
       })),
       { transaction }
     );

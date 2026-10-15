@@ -29,6 +29,7 @@ import { canManageCourse, getAccessEnrollment } from '../services/accessService.
 import { getPublicSettings } from '../services/settingsService.js';
 import { isWooCommerceEnabled, buildBuyUrl } from '../services/woocommerceService.js';
 import { loadCertificateForRender, DOWNLOADABLE_STATUSES } from '../services/certificateService.js';
+import { publicPlans } from '../services/storePlanService.js';
 
 const TUTOR_INCLUDE = {
   model: User,
@@ -402,6 +403,11 @@ export const getPage = async (req, res) => {
 };
 
 /** GET /public/settings - non-secret site settings (name, logo, currency, Razorpay key id...). */
+/** GET /public/store-plans - active plans that can be bought (slug, name, price, store product id). The website links its Enroll buttons from this. */
+export const getStorePlans = async (req, res) => {
+  return successResponse(res, { data: { plans: await publicPlans() } });
+};
+
 export const getSiteSettings = async (req, res) => {
   return successResponse(res, { data: { settings: await getPublicSettings() } });
 };

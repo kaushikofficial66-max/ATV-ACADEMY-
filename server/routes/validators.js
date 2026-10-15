@@ -112,6 +112,7 @@ export const v = {
   submissionReview: [body('status').isIn(['under_review', 'approved', 'rejected', 'resubmission_required']).withMessage('Invalid review status.')],
   liveClass: [
     requiredId('course_id'),
+    optionalId('section_id'),
     body('title').trim().notEmpty().withMessage('Title is required.').isLength({ max: 255 }),
     body('scheduled_start').isISO8601().withMessage('scheduled_start must be an ISO date-time.'),
     body('scheduled_end').isISO8601().withMessage('scheduled_end must be an ISO date-time.'),

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { toast } from 'sonner';
+import { toast } from 'react-toastify';
 import { post, getErrorMessage } from '@/lib/api/client';
 import { EP } from '@/lib/api/endpoints';
 import { Button, PageHeader, StatusBadge } from '@/components/ui';

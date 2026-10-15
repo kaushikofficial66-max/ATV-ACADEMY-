@@ -6,6 +6,7 @@ import { usePathname } from 'next/navigation';
 import { LogOut, MoreHorizontal } from 'lucide-react';
 import { MOBILE_TABS, NAVIGATION } from '@/config/navigation';
 import { useAuth } from '@/features/auth/AuthProvider';
+import { useConfirmLogout } from '@/features/auth/useConfirmLogout';
 import { useStoreCommerce } from '@/features/commerce/useStoreCommerce';
 import { Avatar } from '@/components/ui';
 import { cn, fullName, humanize } from '@/lib/utils';
@@ -18,7 +19,8 @@ const isActive = (pathname, href, root) => (href === root ? pathname === root : 
  */
 export default function BottomNav({ role }) {
   const pathname = usePathname();
-  const { user, logout, impersonator } = useAuth();
+  const { user, impersonator } = useAuth();
+  const logout = useConfirmLogout();
   const store = useStoreCommerce();
   // The sheet is "open" only for the page it was opened on, so navigating closes it without an effect.
   const [openPath, setOpenPath] = useState(null);
@@ -36,7 +38,7 @@ export default function BottomNav({ role }) {
     return () => window.removeEventListener('keydown', onKey);
   }, [open]);
 
-  const extra = NAVIGATION[role].filter((i) => (i.section ? true : !tabHrefs.has(i.href) && !(store.enabled && i.hideInStoreMode)));
+  const extra = NAVIGATION[role].filter((i) => (i.section ? true : !tabHrefs.has(i.href) && !(store.enabled && i.hideInStoreMode) && !(i.storeModeOnly && !store.enabled)));
 
   return (
     <>

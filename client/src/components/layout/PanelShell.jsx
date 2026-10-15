@@ -8,6 +8,7 @@ import { useAuth } from '@/features/auth/AuthProvider';
 import NotificationBell from '@/features/notifications/NotificationBell';
 import { useStoreCommerce } from '@/features/commerce/useStoreCommerce';
 import Logo from '@/components/layout/Logo';
+import { useConfirmLogout } from '@/features/auth/useConfirmLogout';
 import BottomNav from '@/components/layout/BottomNav';
 import { Avatar } from '@/components/ui';
 import { cn, fullName, humanize } from '@/lib/utils';
@@ -20,7 +21,7 @@ function SidebarNav({ role }) {
   const root = `/${role}`;
   return (
     <nav className="scroll-thin flex-1 space-y-0.5 overflow-y-auto px-3 py-4" aria-label="Main">
-      {NAVIGATION[role].filter((item) => !(store.enabled && item.hideInStoreMode)).map((item, i) =>
+      {NAVIGATION[role].filter((item) => !(store.enabled && item.hideInStoreMode) && !(item.storeModeOnly && !store.enabled)).map((item, i) =>
         item.section ? (
           <p key={`s-${i}`} className="px-3 pb-1.5 pt-6 text-[11px] font-semibold uppercase tracking-wider text-slate-400">
             {item.section}
@@ -74,7 +75,8 @@ function SidebarFooter({ user, role, onLogout, exitLabel }) {
  *  - phone: compact top bar + Android-style bottom navigation (see BottomNav)
  */
 export default function PanelShell({ role, children }) {
-  const { user, logout, impersonator, exitViewAs } = useAuth();
+  const { user, impersonator, exitViewAs } = useAuth();
+  const logout = useConfirmLogout();
   const exitLabel = impersonator ? 'Exit preview' : 'Log out';
 
   return (

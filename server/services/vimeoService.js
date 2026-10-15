@@ -27,6 +27,7 @@ export const getVimeoConfig = async () => {
   return {
     token: cfg.vimeo_access_token,
     folderId: cfg.vimeo_folder_id,
+    recordingsFolderId: cfg.vimeo_recordings_folder_id || cfg.vimeo_folder_id,
     privacyView: cfg.vimeo_privacy_view || 'disable',
     embedDomains: String(cfg.vimeo_embed_domains || '')
       .split(',')
@@ -101,21 +102,22 @@ const privacyPayload = (cfg) => ({
  * returns { moved } | { skipped } | { moved: false, error }. Vimeo only allows this when the access
  * token has the "interact" scope, so a 403 gets an explicit hint instead of a silent miss.
  */
-export const moveToConfiguredFolder = async (videoId) => {
+export const moveToConfiguredFolder = async (videoId, folderOverride) => {
   const cfg = await getVimeoConfig();
-  if (!cfg.folderId) return { moved: false, skipped: true };
+  const folderId = folderOverride || cfg.folderId;
+  if (!folderId) return { moved: false, skipped: true };
   try {
-    await api('put', `/me/projects/${encodeURIComponent(cfg.folderId)}/videos/${videoId}`, { action: 'move to folder' });
+    await api('put', `/me/projects/${encodeURIComponent(folderId)}/videos/${videoId}`, { action: 'move to folder' });
     return { moved: true };
   } catch (error) {
     const hint = /interact/i.test(error.message) ? " Create a new Vimeo access token that also has the 'interact' scope and set it as VIMEO_ACCESS_TOKEN." : '';
-    console.warn(`[Vimeo]: video ${videoId} was NOT moved into folder ${cfg.folderId}: ${error.message}.${hint}`);
+    console.warn(`[Vimeo]: video ${videoId} was NOT moved into folder ${folderId}: ${error.message}.${hint}`);
     return { moved: false, error: `${error.message}.${hint}` };
   }
 };
 
 /** Applies embed-domain whitelist and folder after creation (best effort, never throws). */
-const finishVideoSetup = async (videoId, cfg) => {
+const finishVideoSetup = async (videoId, cfg, folderId) => {
   for (const domain of cfg.embedDomains) {
     try {
       await api('put', `/videos/${videoId}/privacy/domains/${encodeURIComponent(domain)}`, { action: `allow embed domain ${domain}` });
@@ -123,11 +125,11 @@ const finishVideoSetup = async (videoId, cfg) => {
       console.warn(`[Vimeo]: ${error.message}`);
     }
   }
-  await moveToConfiguredFolder(videoId);
+  await moveToConfiguredFolder(videoId, folderId);
 };
 
 /** Creates a Vimeo video placeholder with a tus upload link. */
-const createTusVideo = async ({ size, name, description }) => {
+const createTusVideo = async ({ size, name, description, folderId }) => {
   const cfg = await requireConfig();
   const data = await api('post', '/me/videos', {
     action: 'upload (create)',
@@ -139,8 +141,56 @@ const createTusVideo = async ({ size, name, description }) => {
     }
   });
   const videoId = videoIdFromUri(data.uri);
-  await finishVideoSetup(videoId, cfg);
+  await finishVideoSetup(videoId, cfg, folderId);
   return { videoId, uploadLink: data.upload?.upload_link, details: data };
+};
+
+/**
+ * Sends a file to a Vimeo tus upload link in 64 MB chunks.
+ * readChunk(offset, length) returns the Buffer for that byte range.
+ */
+const tusUpload = async (uploadLink, size, readChunk) => {
+  let offset = 0;
+  while (offset < size) {
+    const length = Math.min(TUS_CHUNK_SIZE, size - offset);
+    const buffer = await readChunk(offset, length);
+    if (buffer.length !== length) throw new ApiError(502, `Vimeo upload failed: source ended early at byte ${offset + buffer.length} of ${size}.`);
+    try {
+      const res = await axios.patch(uploadLink, buffer, {
+        headers: { 'Tus-Resumable': '1.0.0', 'Upload-Offset': String(offset), 'Content-Type': 'application/offset+octet-stream', Accept: ACCEPT },
+        maxBodyLength: Infinity,
+        maxContentLength: Infinity,
+        timeout: 10 * 60 * 1000
+      });
+      offset = Number(res.headers['upload-offset'] ?? offset + length);
+    } catch (error) {
+      throw vimeoError(error, `upload (chunk at byte ${offset})`);
+    }
+  }
+};
+
+/** Reads a stream in order and hands out exactly `length` bytes at a time (the last read may be shorter). */
+export const streamChunkReader = (stream) => {
+  const iterator = stream[Symbol.asyncIterator]();
+  let parts = [];
+  let buffered = 0;
+  let ended = false;
+  return async (_offset, length) => {
+    while (buffered < length && !ended) {
+      const { value, done } = await iterator.next();
+      if (done) ended = true;
+      else {
+        parts.push(value);
+        buffered += value.length;
+      }
+    }
+    const all = Buffer.concat(parts);
+    const chunk = all.subarray(0, length);
+    const rest = all.subarray(length);
+    parts = rest.length ? [rest] : [];
+    buffered = rest.length;
+    return chunk;
+  };
 };
 
 /**
@@ -154,25 +204,32 @@ export const uploadVideoFile = async (filePath, { name, description } = {}) => {
 
   const handle = await fs.promises.open(filePath, 'r');
   try {
-    let offset = 0;
-    while (offset < size) {
-      const length = Math.min(TUS_CHUNK_SIZE, size - offset);
+    await tusUpload(uploadLink, size, async (offset, length) => {
       const buffer = Buffer.alloc(length);
       await handle.read(buffer, 0, length, offset);
-      try {
-        const res = await axios.patch(uploadLink, buffer, {
-          headers: { 'Tus-Resumable': '1.0.0', 'Upload-Offset': String(offset), 'Content-Type': 'application/offset+octet-stream', Accept: ACCEPT },
-          maxBodyLength: Infinity,
-          maxContentLength: Infinity,
-          timeout: 10 * 60 * 1000
-        });
-        offset = Number(res.headers['upload-offset'] ?? offset + length);
-      } catch (error) {
-        throw vimeoError(error, `upload (chunk at byte ${offset})`);
-      }
-    }
+      return buffer;
+    });
   } finally {
     await handle.close();
+  }
+  return { videoId, embedUrl: details.player_embed_url, link: details.link };
+};
+
+/**
+ * Uploads a readable stream of a known size (e.g. a Zoom recording download) straight to Vimeo
+ * without writing it to disk. `folderId` overrides the default folder. If the transfer fails, the
+ * half-created Vimeo video is deleted so retries do not leave orphans. Returns { videoId, embedUrl, link }.
+ */
+export const uploadVideoStream = async (stream, size, { name, description, folderId } = {}) => {
+  if (!size || Number(size) <= 0) throw ApiError.badRequest('A stream upload needs the file size in bytes.');
+  const { videoId, uploadLink, details } = await createTusVideo({ size, name, description, folderId });
+  try {
+    if (!uploadLink) throw new ApiError(502, 'Vimeo did not return an upload link.');
+    await tusUpload(uploadLink, Number(size), streamChunkReader(stream));
+  } catch (error) {
+    stream.destroy?.();
+    await deleteVimeoVideo(videoId).catch(() => {});
+    throw error;
   }
   return { videoId, embedUrl: details.player_embed_url, link: details.link };
 };
@@ -233,6 +290,34 @@ export const mapVimeoState = (details) => {
   };
 };
 
+/**
+ * For a video that was LINKED (not uploaded by the LMS): returns a plain-language reason why Vimeo may
+ * refuse to play it inside the LMS, or null when it looks fine. Best effort, never throws.
+ */
+export const playbackWarning = async (videoId, details) => {
+  try {
+    const view = details?.privacy?.view;
+    const embed = details?.privacy?.embed;
+    if (embed === 'private') {
+      return 'Embedding is switched off for this video on Vimeo, so it will not play here. In Vimeo open the video > Settings > Privacy and set "Where can this be embedded?" to "Specific domains" (add your site) or "Anywhere".';
+    }
+    if (['nobody', 'password', 'users', 'contacts'].includes(view)) {
+      return `This video's Vimeo privacy is "${view}", which blocks viewers. In Vimeo open the video > Settings > Privacy and set "Who can watch?" to "Hide from Vimeo" (or Unlisted).`;
+    }
+    if (embed === 'whitelist') {
+      const cfg = await getVimeoConfig();
+      if (!cfg.embedDomains.length) return null;
+      const data = await api('get', `/videos/${encodeURIComponent(videoId)}/privacy/domains`, { action: 'embed domains' });
+      const allowed = (data.data || []).map((d) => String(d.domain).toLowerCase());
+      const missing = cfg.embedDomains.filter((d) => !allowed.includes(d.toLowerCase()));
+      if (missing.length) return `This video can only be embedded on specific domains and these are missing: ${missing.join(', ')}. Add them in Vimeo > the video > Settings > Privacy > "Where can this be embedded?".`;
+    }
+  } catch (error) {
+    console.warn(`[Vimeo]: could not check playback settings of ${videoId}: ${error.message}`);
+  }
+  return null;
+};
+
 /** Adds player parameters suited to an LMS (no title/byline overlays, no tracking). */
 export const playerUrl = (embedUrl) => {
   if (!embedUrl) return null;
@@ -286,12 +371,14 @@ export default {
   isVimeoUrl,
   videoIdFromUri,
   uploadVideoFile,
+  uploadVideoStream,
   createDirectUpload,
   getVideoDetails,
   deleteVimeoVideo,
   mapVimeoState,
   playerUrl,
   getDirectPlayLinks,
+  playbackWarning,
   moveToConfiguredFolder,
   testVimeoConnection
 };

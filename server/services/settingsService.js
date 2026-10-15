@@ -87,6 +87,10 @@ export const SETTING_DEFINITIONS = {
   zoom_client_id: { group: 'zoom', env: 'ZOOM_CLIENT_ID', default: '' },
   zoom_client_secret: { group: 'zoom', env: 'ZOOM_CLIENT_SECRET', default: '', secret: true },
   zoom_host_user: { group: 'zoom', env: 'ZOOM_HOST_USER', default: 'me' },
+  // New meetings are set to record to the Zoom cloud automatically; the server then copies the recording to Vimeo.
+  zoom_auto_record: { group: 'zoom', env: 'ZOOM_AUTO_RECORD', default: 'true', type: 'boolean' },
+  // After a successful Vimeo upload, move the recording to Zoom's trash (frees Zoom cloud storage; recoverable for 30 days).
+  zoom_trash_after_upload: { group: 'zoom', env: 'ZOOM_TRASH_AFTER_UPLOAD', default: 'false', type: 'boolean' },
 
   // Storage: Vimeo for recorded videos, Cloudflare R2 for files (documents, images, projects, reports).
   // storage_driver: auto = use Vimeo / R2 when configured, otherwise this server's disk;
@@ -97,6 +101,8 @@ export const SETTING_DEFINITIONS = {
   // Vimeo (recorded videos)
   vimeo_access_token: { group: 'storage', env: 'VIMEO_ACCESS_TOKEN', default: '', secret: true },
   vimeo_folder_id: { group: 'storage', env: 'VIMEO_FOLDER_ID', default: '' },
+  // Folder for live class recordings; empty = use vimeo_folder_id.
+  vimeo_recordings_folder_id: { group: 'storage', env: 'VIMEO_RECORDINGS_FOLDER_ID', default: '' },
   // disable = hidden on vimeo.com, embed-only (recommended) | unlisted | nobody | anybody
   vimeo_privacy_view: { group: 'storage', env: 'VIMEO_PRIVACY_VIEW', default: 'disable' },
   // Comma-separated domains allowed to embed the player, e.g. "atvacademy.com,localhost"

@@ -2,7 +2,7 @@
 
 import { use, useState } from 'react';
 import { notFound } from 'next/navigation';
-import { toast } from 'sonner';
+import { toast } from 'react-toastify';
 import { Eye } from 'lucide-react';
 import { getErrorMessage } from '@/lib/api/client';
 import { EP } from '@/lib/api/endpoints';

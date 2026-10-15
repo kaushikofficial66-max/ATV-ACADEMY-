@@ -1,5 +1,6 @@
 import {
   Eye,
+  Package,
   LayoutDashboard,
   BookOpen,
   PlayCircle,
@@ -76,6 +77,7 @@ export const NAVIGATION = {
     { label: 'Live Classes', href: '/admin/live-classes', icon: PlayCircle },
     { section: 'Sales' },
     { label: 'Orders', href: '/admin/orders', icon: Receipt },
+    { label: 'Store plans', href: '/admin/store-plans', icon: Package },
     { label: 'Payments', href: '/admin/payments', icon: CreditCard },
     { label: 'Coupons', href: '/admin/coupons', icon: TicketPercent, hideInStoreMode: true },
     { label: 'Tutor Payouts', href: '/admin/payouts', icon: Banknote },

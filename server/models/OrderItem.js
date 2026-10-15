@@ -18,6 +18,11 @@ OrderItem.init(
       type: DataTypes.BIGINT.UNSIGNED,
       allowNull: false
     },
+    // Set when the line came from a store PLAN (Essential / Pro / Complete); see courseUnlockService.js
+    store_plan_id: {
+      type: DataTypes.BIGINT.UNSIGNED,
+      allowNull: true
+    },
     course_title: {
       type: DataTypes.STRING(255),
       allowNull: false

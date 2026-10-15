@@ -1,11 +1,13 @@
 'use client';
 
+import { useRouter } from 'next/navigation';
 import { EP } from '@/lib/api/endpoints';
 import { PageHeader, StatusBadge } from '@/components/ui';
 import ResourceList from '@/components/data/ResourceList';
 import { formatDateTime, formatPrice, fullName, humanize } from '@/lib/utils';
 
 export default function AdminPaymentsPage() {
+  const router = useRouter();
   return (
     <>
       <PageHeader title="Payments" description="Store (WooCommerce) payment references and legacy Razorpay transactions. Full payment records live in WooCommerce." />
@@ -14,6 +16,7 @@ export default function AdminPaymentsPage() {
         endpoint={EP.admin.payments}
         dataKey="payments"
         searchPlaceholder="Payment / order id..."
+        onRowClick={(p) => p.order?.id && router.push(`/admin/orders/${p.order.id}`)}
         filters={[
           { name: 'status', label: 'Status', options: ['created', 'pending', 'success', 'failed', 'refunded'] },
           { name: 'gateway', label: 'Source', options: ['woocommerce', 'razorpay', 'manual', 'free'] }

@@ -20,8 +20,26 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
+/**
+ * The API names model timestamps createdAt / updatedAt, while the screens read created_at / updated_at.
+ * Every response gets the snake_case twin of each camelCase timestamp, so dates show everywhere.
+ */
+const addTimestampAliases = (value) => {
+  if (Array.isArray(value)) {
+    value.forEach(addTimestampAliases);
+  } else if (value && typeof value === 'object') {
+    if ('createdAt' in value && !('created_at' in value)) value.created_at = value.createdAt;
+    if ('updatedAt' in value && !('updated_at' in value)) value.updated_at = value.updatedAt;
+    Object.values(value).forEach(addTimestampAliases);
+  }
+  return value;
+};
+
 api.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    if (typeof response.data === 'object') addTimestampAliases(response.data);
+    return response;
+  },
   (error) => {
     if (error.response?.status === 401 && getToken()) {
       clearToken();

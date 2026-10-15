@@ -10,6 +10,7 @@ import CourseTutorsCard from './CourseTutorsCard';
 import { useManagedCourse } from './CourseManageShell';
 import { builderKeys } from './keys';
 import { humanize } from '@/lib/utils';
+import { useConfirm } from '@/components/feedback/ConfirmProvider';
 
 /** Status changes a tutor may make (mirrors the API); admins may set any status. */
 const TUTOR_TRANSITIONS = {
@@ -35,6 +36,7 @@ const ADMIN_TRANSITIONS = {
 const ACTION_LABEL = { pending: 'Submit for review', draft: 'Move to draft', published: 'Publish', archived: 'Archive', approved: 'Approve (not live yet)', rejected: 'Reject' };
 
 export default function CourseDetails({ role, courseId }) {
+  const ask = useConfirm();
   const router = useRouter();
   const { data } = useManagedCourse(role, courseId);
   const m = manage(role);
@@ -45,8 +47,8 @@ export default function CourseDetails({ role, courseId }) {
 
   const { course, summary } = data;
   const next = (role === 'admin' ? ADMIN_TRANSITIONS : TUTOR_TRANSITIONS)[course.status] || [];
-  const changeStatus = (s) => {
-    if (course.status === 'published' && !confirm('This removes the course from the website and students can no longer buy it. Continue?')) return;
+  const changeStatus = async (s) => {
+    if (course.status === 'published' && !(await ask({ title: 'Change course status?', message: 'This removes the course from the website and students can no longer buy it.', confirmLabel: 'Continue', tone: 'warning' }))) return;
     setStatus.mutate(s);
   };
 
@@ -82,7 +84,7 @@ export default function CourseDetails({ role, courseId }) {
             No final project yet. Without one, students complete the course at 90% progress automatically.
           </p>
         )}
-        <Button variant="danger" size="sm" onClick={() => confirm('Delete this course? This cannot be undone.') && remove.mutate()}>
+        <Button variant="danger" size="sm" onClick={async () => (await ask({ title: 'Delete course?', message: 'This cannot be undone.', confirmLabel: 'Delete course' })) && remove.mutate()}>
           Delete course
         </Button>
       </div>

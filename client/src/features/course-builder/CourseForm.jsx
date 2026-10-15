@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
-import { toast } from 'sonner';
+import { toast } from 'react-toastify';
 import { get, upload, getErrorMessage, getFieldErrors } from '@/lib/api/client';
 import { EP, manage } from '@/lib/api/endpoints';
 import { Button, Card, Field, Input, Select, Textarea } from '@/components/ui';

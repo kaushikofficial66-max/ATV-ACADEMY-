@@ -11,6 +11,7 @@ import { Loader } from '@/components/feedback/Loader';
 import { useApiMutation } from '@/hooks/useApiMutation';
 import { useAuth } from '@/features/auth/AuthProvider';
 import { ROLES } from '@/config/constants';
+import { useConfirm } from '@/components/feedback/ConfirmProvider';
 
 const PROFILE_FIELDS = ['bio', 'date_of_birth', 'gender', 'address', 'city', 'state', 'country', 'postal_code', 'website', 'linkedin_url'];
 
@@ -121,6 +122,7 @@ function PhotoCard({ user }) {
     fd.append('profile_image', file);
     return upload(EP.account.photo, fd, { method: 'put' });
   }, opts);
+  const ask = useConfirm();
   const removePhoto = useApiMutation(() => del(EP.account.photo), opts);
 
   return (
@@ -132,7 +134,7 @@ function PhotoCard({ user }) {
           <input type="file" accept="image/*" className="sr-only" onChange={(e) => e.target.files?.[0] && uploadPhoto.mutate(e.target.files[0])} />
         </label>
         {user.profile_image && (
-          <button type="button" className="block text-xs text-slate-500 hover:text-red-600" onClick={() => removePhoto.mutate()}>
+          <button type="button" className="block text-xs text-slate-500 hover:text-red-600" onClick={async () => (await ask({ title: 'Remove photo?', message: 'Your profile photo will be removed.', confirmLabel: 'Remove' })) && removePhoto.mutate()}>
             Remove photo
           </button>
         )}

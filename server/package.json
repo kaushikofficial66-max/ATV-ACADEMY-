@@ -11,7 +11,8 @@
     "seed": "node scripts/seed.js",
     "test": "node --test --test-concurrency=1 tests/*.test.js",
     "create-admin": "node scripts/createAdmin.js",
-    "vimeo:to-folder": "node scripts/moveVimeoToFolder.js"
+    "vimeo:to-folder": "node scripts/moveVimeoToFolder.js",
+    "zoom:enable-recording": "node scripts/enableClassRecording.js"
   },
   "keywords": [],
   "author": "",

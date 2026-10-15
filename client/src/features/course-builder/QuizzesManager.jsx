@@ -12,10 +12,12 @@ import { Loader } from '@/components/feedback/Loader';
 import { useApiMutation } from '@/hooks/useApiMutation';
 import QuizEditor from '@/features/quizzes/QuizEditor';
 import { builderKeys } from './keys';
+import { useConfirm } from '@/components/feedback/ConfirmProvider';
 
 export default function QuizzesManager({ role, courseId }) {
   const m = manage(role);
   const key = builderKeys.quizzes(role, courseId);
+  const ask = useConfirm();
   const [editing, setEditing] = useState(null); // {} new | { id }
   const quizzes = useQuery({ queryKey: key, queryFn: () => get(m.quizzes(courseId)).then((r) => r.data.quizzes) });
   const curriculum = useQuery({ queryKey: builderKeys.curriculum(role, courseId), queryFn: () => get(m.curriculum(courseId)).then((r) => r.data.sections) });
@@ -58,9 +60,9 @@ export default function QuizzesManager({ role, courseId }) {
                       size="sm"
                       variant="ghost"
                       aria-label="Delete quiz"
-                      onClick={(e) => {
+                      onClick={async (e) => {
                         e.stopPropagation();
-                        if (confirm(`Delete "${q.title}"?`)) remove.mutate(q.id);
+                        if (await ask({ title: 'Delete quiz?', message: `"${q.title}" will be deleted.`, confirmLabel: 'Delete' })) remove.mutate(q.id);
                       }}
                     >
                       <Trash2 className="size-4" />

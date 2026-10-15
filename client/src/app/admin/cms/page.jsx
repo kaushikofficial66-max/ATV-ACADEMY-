@@ -11,6 +11,7 @@ import { QueryState } from '@/components/feedback/States';
 import { Loader } from '@/components/feedback/Loader';
 import { useApiMutation } from '@/hooks/useApiMutation';
 import { formatDate } from '@/lib/utils';
+import { useConfirm } from '@/components/feedback/ConfirmProvider';
 
 const PAGES_KEY = ['admin', 'cms', 'pages'];
 const CONTENTS_KEY = ['admin', 'cms', 'contents'];
@@ -29,6 +30,7 @@ export default function AdminCmsPage() {
 }
 
 function PagesSection() {
+  const ask = useConfirm();
   const [editing, setEditing] = useState(null);
   const query = useQuery({ queryKey: PAGES_KEY, queryFn: () => get(EP.admin.cmsPages).then((r) => r.data.pages) });
   const remove = useApiMutation((id) => del(EP.admin.cmsPage(id)), { invalidate: [PAGES_KEY] });
@@ -62,9 +64,9 @@ function PagesSection() {
                   <Button
                     size="sm"
                     variant="ghost"
-                    onClick={(e) => {
+                    onClick={async (e) => {
                       e.stopPropagation();
-                      if (confirm(`Delete "${p.title}"?`)) remove.mutate(p.id);
+                      if (await ask({ title: 'Delete page?', message: `"${p.title}" will be deleted.`, confirmLabel: 'Delete' })) remove.mutate(p.id);
                     }}
                   >
                     Delete
@@ -177,6 +179,7 @@ function ContentsSection() {
 }
 
 function ContentForm({ block, onDone }) {
+  const ask = useConfirm();
   const [v, setV] = useState({
     section_key: block.section_key || '',
     title: block.title || '',
@@ -229,7 +232,7 @@ function ContentForm({ block, onDone }) {
           Save block
         </Button>
         {block.section_key && (
-          <Button type="button" variant="ghost" onClick={() => confirm('Delete this block?') && remove.mutate()}>
+          <Button type="button" variant="ghost" onClick={async () => (await ask({ title: 'Delete block?', message: 'This content block will be deleted.', confirmLabel: 'Delete' })) && remove.mutate()}>
             Delete
           </Button>
         )}

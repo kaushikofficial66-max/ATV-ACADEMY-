@@ -38,7 +38,7 @@ const storeReady = async () => (await isWooCommerceEnabled()) && (await isApiCon
 /** True when the store, not the LMS, sets this course's price. */
 export const isPriceManagedByStore = async (course) => Boolean(course.woocommerce_product_id) && (await isWooCommerceEnabled());
 
-const absoluteImageUrl = async (url) => {
+export const absoluteImageUrl = async (url) => {
   if (!url) return null;
   if (/^https:\/\//i.test(url)) return url;
   const apiUrl = String((await getSetting('api_url')) || '').replace(/\/+$/, '');

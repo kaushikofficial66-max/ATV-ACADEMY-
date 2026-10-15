@@ -8,6 +8,8 @@ import {
   Lecture,
   CourseResource,
   RecordedVideo,
+  StorePlan,
+  StorePlanCourse,
   Quiz,
   Project,
   User,
@@ -47,7 +49,7 @@ const storeMessage = (result) =>
 import { recordFile, removeStoredFile, sendStoredFile } from '../../services/storageService.js';
 import { publicUrlFor, storageKeyFor } from '../../middlewares/upload.js';
 import { storeVideoUpload, recordVideoFile, removeVideoAsset, syncVimeoVideo, getVideoPlayback, providerOf } from '../../services/videoService.js';
-import { isVimeoConfigured, createDirectUpload, deleteVimeoVideo, getVideoDetails, mapVimeoState, parseVimeoId, isVimeoUrl } from '../../services/vimeoService.js';
+import { isVimeoConfigured, createDirectUpload, deleteVimeoVideo, getVideoDetails, mapVimeoState, parseVimeoId, isVimeoUrl, playbackWarning } from '../../services/vimeoService.js';
 import { recalculateCourseEnrollments } from '../../services/progressService.js';
 import { notifyAdmins } from '../../services/notificationService.js';
 
@@ -99,6 +101,8 @@ const readProductMapping = async (req, courseId = null) => {
   if (taken && Number(taken.id) !== Number(courseId)) {
     throw ApiError.conflict(`WooCommerce product ${raw} is already linked to "${taken.title}".`);
   }
+  const plan = await StorePlan.findOne({ where: { woocommerce_product_id: raw }, attributes: ['id', 'name'] });
+  if (plan) throw ApiError.conflict(`WooCommerce product ${raw} is the product of the store plan "${plan.name}" (Admin > Store plans). A course needs its own product.`);
   return { woocommerce_product_id: raw };
 };
 
@@ -304,6 +308,11 @@ export const deleteCourse = async (req, res) => {
   ]);
   if (enrollments || sales) {
     throw ApiError.conflict('This course has enrollments or orders and cannot be deleted. Archive it instead.');
+  }
+  // A store plan that includes this course would silently lose it: make the admin change the plan first.
+  const plans = await StorePlan.findAll({ attributes: ['name'], include: [{ model: StorePlanCourse, as: 'planCourses', attributes: [], where: { course_id: course.id } }] });
+  if (plans.length) {
+    throw ApiError.conflict(`This course is part of the store plan ${plans.map((p) => `"${p.name}"`).join(', ')}. Remove it from the plan (Admin > Store plans) before deleting it.`);
   }
 
   const videos = await RecordedVideo.findAll({ where: { course_id: course.id }, attributes: ['id', 'storage_key', 'vimeo_video_id'] });
@@ -689,6 +698,8 @@ const resolveVideoSource = async (req, title) => {
     const mapped = mapVimeoState(details);
     return {
       provider: 'vimeo_linked',
+      name: details.name,
+      warning: await playbackWarning(vimeoId, details),
       fields: {
         vimeo_video_id: vimeoId,
         storage_key: null,
@@ -716,11 +727,12 @@ const resolveVideoSource = async (req, title) => {
 export const uploadVideo = async (req, res) => {
   const course = await assertCourseManager(req.user, req.params.courseId);
   let { sectionId, lecture } = await resolveVideoPlacement(course.id, req.body.section_id, req.body.lecture_id);
-  const title = req.body.title || (req.file ? req.file.originalname.replace(/\.[^.]+$/, '') : 'Recorded video');
+  let title = req.body.title || (req.file ? req.file.originalname.replace(/\.[^.]+$/, '') : 'Recorded video');
   const duration = req.body.duration_seconds ? Number(req.body.duration_seconds) : null;
 
   // Upload / look up the video first (network), then write the DB rows.
   const stored = await resolveVideoSource(req, title);
+  if (!req.body.title && stored.name) title = String(stored.name).slice(0, 255); // linked video: use its Vimeo title
 
   let video;
   try {
@@ -766,7 +778,7 @@ export const uploadVideo = async (req, res) => {
   return successResponse(res, {
     statusCode: 201,
     message: messages[stored.provider],
-    data: { video: full, storage_provider: stored.provider === 'vimeo_linked' ? 'vimeo' : stored.provider }
+    data: { video: full, storage_provider: stored.provider === 'vimeo_linked' ? 'vimeo' : stored.provider, ...(stored.warning && { warning: stored.warning }) }
   });
 };
 

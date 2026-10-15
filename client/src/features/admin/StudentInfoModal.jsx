@@ -21,8 +21,8 @@ const TABS = [
   { key: 'engagement', label: 'Community & more' }
 ];
 
-const DEVICE_ICON = { mobile: Smartphone, tablet: Tablet, desktop: Laptop, unknown: HelpCircle };
-const DEVICE_LABEL = { mobile: 'Mobile', tablet: 'Tablet', desktop: 'Laptop / Desktop', unknown: 'Unknown' };
+export const DEVICE_ICON = { mobile: Smartphone, tablet: Tablet, desktop: Laptop, unknown: HelpCircle };
+export const DEVICE_LABEL = { mobile: 'Mobile', tablet: 'Tablet', desktop: 'Laptop / Desktop', unknown: 'Unknown' };
 
 /** Admin "More info" view of a student: every stored record, grouped by category. */
 export default function StudentInfoModal({ studentId, onClose }) {
@@ -72,7 +72,7 @@ export default function StudentInfoModal({ studentId, onClose }) {
 
 /* ---------- building blocks ---------- */
 
-function Section({ title, children }) {
+export function Section({ title, children }) {
   return (
     <section className="space-y-2">
       <h3 className="text-sm font-semibold text-slate-900">{title}</h3>
@@ -81,7 +81,7 @@ function Section({ title, children }) {
   );
 }
 
-function Facts({ items }) {
+export function Facts({ items }) {
   return (
     <dl className="grid gap-x-6 gap-y-3 rounded-lg border border-slate-200 p-4 text-sm sm:grid-cols-2 lg:grid-cols-3">
       {items.map(([label, value]) => (
@@ -94,7 +94,7 @@ function Facts({ items }) {
   );
 }
 
-function Tile({ label, value }) {
+export function Tile({ label, value }) {
   return (
     <div className="rounded-lg border border-slate-200 p-3">
       <p className="text-xs text-slate-500">{label}</p>
@@ -104,7 +104,7 @@ function Tile({ label, value }) {
 }
 
 /** Horizontal share bars for { key: count } breakdowns (devices, OS, browsers). */
-function Breakdown({ data, labels = {}, icons = {}, empty = 'No data yet.' }) {
+export function Breakdown({ data, labels = {}, icons = {}, empty = 'No data yet.' }) {
   const entries = Object.entries(data || {}).sort((a, b) => b[1] - a[1]);
   const total = entries.reduce((s, [, n]) => s + n, 0);
   if (!total) return <p className="text-sm text-slate-500">{empty}</p>;
@@ -170,7 +170,6 @@ const dt = (v) => (v ? formatDateTime(v) : '-');
 
 function Header({ d }) {
   const s = d.student;
-  console.log("s", s)
   return (
     <div className="flex flex-wrap items-center gap-4">
       <Avatar user={s} size={56} />

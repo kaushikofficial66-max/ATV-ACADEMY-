@@ -18,6 +18,15 @@ LiveClass.init(
       type: DataTypes.BIGINT.UNSIGNED,
       allowNull: false
     },
+    // The module (topic) the class is placed in and its "live class" lecture (students see both)
+    section_id: {
+      type: DataTypes.BIGINT.UNSIGNED,
+      allowNull: true
+    },
+    lecture_id: {
+      type: DataTypes.BIGINT.UNSIGNED,
+      allowNull: true
+    },
     title: {
       type: DataTypes.STRING(255),
       allowNull: false
@@ -57,6 +66,29 @@ LiveClass.init(
     status: {
       type: DataTypes.ENUM('scheduled', 'live', 'completed', 'cancelled'),
       defaultValue: 'scheduled'
+    },
+    // Automatic Zoom cloud recording -> Vimeo (see services/liveClassRecordingService.js)
+    recording_status: {
+      type: DataTypes.ENUM('none', 'pending', 'uploading', 'uploaded', 'failed'),
+      allowNull: false,
+      defaultValue: 'none'
+    },
+    recording_video_id: {
+      type: DataTypes.BIGINT.UNSIGNED,
+      allowNull: true
+    },
+    recording_attempts: {
+      type: DataTypes.INTEGER.UNSIGNED,
+      allowNull: false,
+      defaultValue: 0
+    },
+    recording_error: {
+      type: DataTypes.STRING(500),
+      allowNull: true
+    },
+    recording_checked_at: {
+      type: DataTypes.DATE,
+      allowNull: true
     }
   },
   {

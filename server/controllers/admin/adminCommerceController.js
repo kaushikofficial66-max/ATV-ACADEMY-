@@ -51,7 +51,7 @@ export const listOrders = async (req, res) => {
   const [{ count, rows }, totals] = await Promise.all([
     Order.findAndCountAll({
       where,
-      include: [BUYER, itemInclude, { model: Payment, as: 'payments', attributes: ['id', 'status', 'payment_method', 'gateway_payment_id', 'paid_at'] }],
+      include: [BUYER, itemInclude, { model: Payment, as: 'payments', attributes: ['id', 'status', 'payment_gateway', 'payment_method', 'gateway_payment_id', 'paid_at'] }],
       order: getSort(req.query, ['created_at', 'total_amount'], ['created_at', 'DESC']),
       limit,
       offset,
@@ -68,16 +68,52 @@ export const listOrders = async (req, res) => {
   });
 };
 
-/** GET /admin/orders/:orderId - order, items, all payment attempts (transaction details). */
+/**
+ * GET /admin/orders/:orderId - everything about one order:
+ * order (items + course, coupon), buyer + their order history, every payment attempt incl. the gateway
+ * response, who marked it paid / refunded, the enrolments it granted, coupon usage.
+ */
 export const getOrder = async (req, res) => {
   const order = await getOrderDetails(req.params.orderId);
   if (!order) throw ApiError.notFound('Order not found.');
-  const [user, payments, enrollments] = await Promise.all([
-    User.findByPk(order.user_id, { attributes: ['id', 'first_name', 'last_name', 'email', 'phone'] }),
-    Payment.findAll({ where: { order_id: order.id }, order: [['created_at', 'DESC']] }),
-    Enrollment.findAll({ where: { order_id: order.id }, attributes: ['id', 'course_id', 'status', 'completion_percentage'] })
+  const [user, payments, enrollments, couponUsages, history] = await Promise.all([
+    User.findByPk(order.user_id, { attributes: ['id', 'first_name', 'last_name', 'email', 'phone', 'status', 'email_verified_at', 'woocommerce_customer_id', 'created_at'] }),
+    Payment.findAll({ where: { order_id: order.id }, attributes: { exclude: ['gateway_signature'] }, order: [['created_at', 'DESC']] }),
+    Enrollment.findAll({
+      where: { order_id: order.id },
+      attributes: ['id', 'course_id', 'status', 'enrolled_at', 'expires_at', 'completion_percentage', 'completed_at'],
+      include: [{ model: Course, as: 'course', attributes: ['id', 'title', 'slug', 'thumbnail_url'] }],
+      order: [['enrolled_at', 'ASC']]
+    }),
+    CouponUsage.findAll({ where: { order_id: order.id }, attributes: ['id', 'coupon_id', 'discount_amount', 'created_at'] }),
+    Order.findAll({ where: { user_id: order.user_id }, attributes: ['status', [fn('COUNT', col('id')), 'count'], [fn('SUM', col('total_amount')), 'amount']], group: ['status'], raw: true })
   ]);
-  return successResponse(res, { data: { order, user, transactions: payments, enrollments } });
+
+  // Staff who marked the order paid / refunded it by hand (stored as ids in the payment record).
+  const staffIds = new Set();
+  for (const p of payments) {
+    const raw = p.raw_response || {};
+    if (raw.marked_paid_by) staffIds.add(Number(raw.marked_paid_by));
+    if (raw.refund?.by) staffIds.add(Number(raw.refund.by));
+  }
+  const staff = staffIds.size ? await User.findAll({ where: { id: { [Op.in]: [...staffIds] } }, attributes: ['id', 'first_name', 'last_name'] }) : [];
+
+  const stat = (status) => history.find((h) => h.status === status);
+  return successResponse(res, {
+    data: {
+      order,
+      user,
+      transactions: payments,
+      enrollments,
+      coupon_usages: couponUsages,
+      staff,
+      buyer_stats: {
+        orders: history.reduce((n, h) => n + Number(h.count), 0),
+        paid_orders: Number(stat('paid')?.count || 0),
+        paid_amount: toMoney(stat('paid')?.amount || 0)
+      }
+    }
+  });
 };
 
 /**

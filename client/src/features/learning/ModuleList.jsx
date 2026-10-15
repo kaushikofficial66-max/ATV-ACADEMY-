@@ -3,7 +3,8 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { ChevronDown, CircleCheck, FileText, HelpCircle, PlayCircle, Video } from 'lucide-react';
-import { cn, formatDuration } from '@/lib/utils';
+import { cn, formatDuration, formatDateTime } from '@/lib/utils';
+import LiveBadge from './LiveBadge';
 
 const TYPE_ICON = { video: PlayCircle, text: FileText, document: FileText, quiz: HelpCircle, live_class: Video };
 const pad = (n) => String(n).padStart(2, '0');
@@ -85,7 +86,15 @@ export default function ModuleList({ courseId, curriculum = [], activeLectureId,
                             <Icon className={cn('size-[18px]', active ? 'text-brand-700' : 'text-slate-400')} aria-hidden />
                           )}
                         </span>
-                        <span className={cn('min-w-0 flex-1 leading-snug', active && 'font-semibold')}>{l.title}</span>
+                        <span className={cn('min-w-0 flex-1 leading-snug', active && 'font-semibold')}>
+                          {l.title}
+                          {l.lecture_type === 'live_class' && (
+                            <span className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                              <LiveBadge status={l.liveClass?.status} />
+                              {l.liveClass?.status === 'scheduled' && <span className="text-xs font-normal text-slate-500">{formatDateTime(l.liveClass.scheduled_start)}</span>}
+                            </span>
+                          )}
+                        </span>
                         {l.duration_seconds ? <span className="shrink-0 pt-0.5 text-xs tabular-nums text-slate-400">{formatDuration(l.duration_seconds)}</span> : null}
                       </Link>
                     </li>

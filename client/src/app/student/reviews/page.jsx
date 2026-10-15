@@ -12,8 +12,10 @@ import { Loader } from '@/components/feedback/Loader';
 import { useApiMutation } from '@/hooks/useApiMutation';
 import ReviewForm from '@/features/reviews/ReviewForm';
 import { formatDate } from '@/lib/utils';
+import { useConfirm } from '@/components/feedback/ConfirmProvider';
 
 export default function StudentReviewsPage() {
+  const ask = useConfirm();
   const [editing, setEditing] = useState(null); // { courseId, review? }
   const reviews = useQuery({ queryKey: ['student', 'reviews'], queryFn: () => get(EP.student.reviews).then((r) => r.data.reviews) });
   const courses = useQuery({
@@ -53,7 +55,7 @@ export default function StudentReviewsPage() {
                       <Button size="sm" variant="secondary" onClick={() => setEditing({ courseId: r.course_id, review: r })}>
                         Edit
                       </Button>
-                      <Button size="sm" variant="ghost" onClick={() => confirm('Delete this review?') && remove.mutate(r.course_id)}>
+                      <Button size="sm" variant="ghost" onClick={async () => (await ask({ title: 'Delete your review?', message: 'Your review will be deleted.', confirmLabel: 'Delete' })) && remove.mutate(r.course_id)}>
                         Delete
                       </Button>
                     </div>

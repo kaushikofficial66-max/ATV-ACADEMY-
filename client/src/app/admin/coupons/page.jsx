@@ -10,11 +10,13 @@ import ResourceList from '@/components/data/ResourceList';
 import { useApiMutation } from '@/hooks/useApiMutation';
 import { useStoreCommerce } from '@/features/commerce/useStoreCommerce';
 import { formatDate, formatPrice } from '@/lib/utils';
+import { useConfirm } from '@/components/feedback/ConfirmProvider';
 
 const KEY = ['admin', 'coupons'];
 const toDateInput = (d) => (d ? new Date(d).toISOString().slice(0, 10) : '');
 
 export default function AdminCouponsPage() {
+  const ask = useConfirm();
   const [editing, setEditing] = useState(null);
   const toggle = useApiMutation((c) => patch(EP.admin.couponStatus(c.id), { status: c.status === 'active' ? 'inactive' : 'active' }), { invalidate: [KEY] });
   const remove = useApiMutation((id) => del(EP.admin.coupon(id)), { invalidate: [KEY] });
@@ -56,7 +58,7 @@ export default function AdminCouponsPage() {
                 <Button size="sm" variant="ghost" onClick={() => toggle.mutate(c)}>
                   {c.status === 'active' ? 'Disable' : 'Enable'}
                 </Button>
-                <Button size="sm" variant="ghost" onClick={() => confirm(`Delete ${c.code}?`) && remove.mutate(c.id)}>
+                <Button size="sm" variant="ghost" onClick={async () => (await ask({ title: 'Delete coupon?', message: `Coupon ${c.code} will be deleted.`, confirmLabel: 'Delete' })) && remove.mutate(c.id)}>
                   Delete
                 </Button>
               </div>

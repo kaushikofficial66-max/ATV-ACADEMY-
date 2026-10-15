@@ -17,6 +17,8 @@ export const PUBLIC_USER_ATTRS = ['id', 'first_name', 'last_name', 'profile_imag
 export const serializeLiveClassForStudent = (liveClass, { canJoin = false } = {}) => {
   const data = liveClass.toJSON ? liveClass.toJSON() : { ...liveClass };
   delete data.zoom_start_url;
+  // Recording bookkeeping is for tutors / admins only.
+  for (const key of ['recording_status', 'recording_video_id', 'recording_attempts', 'recording_error', 'recording_checked_at']) delete data[key];
   if (!canJoin) {
     delete data.zoom_join_url;
     delete data.password;

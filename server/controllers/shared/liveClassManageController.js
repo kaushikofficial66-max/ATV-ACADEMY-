@@ -8,7 +8,7 @@ import { isAdmin, assertCourseManager, getTutorCourseIds, isCourseTutor } from '
 import { createMeeting, updateMeeting, deleteMeeting, getMeetingStartUrl, isZoomConfigured } from '../../services/zoomService.js';
 import { notifyUsers, getCourseStudentIds } from '../../services/notificationService.js';
 import { getSetting } from '../../services/settingsService.js';
-import { markAbsentees } from '../../services/liveClassService.js';
+import { markAbsentees, assertClassSection, createClassLecture, syncClassLecture, removeClassLectureIfEmpty } from '../../services/liveClassService.js';
 
 const INCLUDES = [
   { model: Course, as: 'course', attributes: ['id', 'title', 'slug', 'thumbnail_url'] },
@@ -116,6 +116,7 @@ export const createLiveClass = async (req, res) => {
   if (start < new Date(Date.now() - 5 * 60 * 1000)) throw ApiError.badRequest('scheduled_start must be in the future.');
 
   const tutors = await resolveTutors(req, course.id);
+  const sectionId = req.body.section_id ? (await assertClassSection(course.id, req.body.section_id)).id : null;
 
   const timezone = req.body.timezone || (await getSetting('timezone'));
   const manual = pick(req.body, ['zoom_meeting_id', 'zoom_join_url', 'zoom_start_url', 'password']);
@@ -139,6 +140,7 @@ export const createLiveClass = async (req, res) => {
     const created = await LiveClass.create(
       {
         course_id: course.id,
+        section_id: sectionId,
         tutor_id: tutors.hostId,
         title: req.body.title,
         description: req.body.description || null,
@@ -151,6 +153,7 @@ export const createLiveClass = async (req, res) => {
       { transaction }
     );
     await saveTutorAssignments(created.id, tutors, transaction);
+    if (sectionId) await createClassLecture(created, { transaction });
     return created;
   });
 
@@ -210,7 +213,8 @@ export const updateLiveClass = async (req, res) => {
       description: data.description,
       scheduled_start: start,
       scheduled_end: end,
-      timezone: data.timezone || liveClass.timezone
+      timezone: data.timezone || liveClass.timezone,
+      ensureRecording: liveClass.recording_status === 'pending'
     });
   }
 
@@ -219,6 +223,7 @@ export const updateLiveClass = async (req, res) => {
     if (tutors) await saveTutorAssignments(liveClass.id, tutors, transaction);
   });
   await liveClass.reload({ include: INCLUDES });
+  if (data.title || data.description !== undefined) await syncClassLecture(liveClass);
   if (rescheduled) {
     await notifyStudents(
       liveClass,
@@ -236,7 +241,10 @@ export const updateLiveClassStatus = async (req, res) => {
   const { status } = req.body;
   if (liveClass.status === 'cancelled' && status !== 'scheduled') throw ApiError.badRequest('A cancelled class can only be rescheduled.');
 
-  await liveClass.update({ status });
+  const wasCancelled = liveClass.status === 'cancelled';
+  await liveClass.update({ status, ...(status === 'cancelled' && { recording_status: 'none' }) });
+  if (status === 'cancelled') await removeClassLectureIfEmpty(liveClass);
+  else if (wasCancelled && liveClass.section_id && !liveClass.lecture_id) await createClassLecture(liveClass);
 
   if (status === 'cancelled') {
     if (liveClass.zoom_meeting_id && (await isZoomConfigured())) await deleteMeeting(liveClass.zoom_meeting_id);
@@ -256,6 +264,7 @@ export const deleteLiveClass = async (req, res) => {
   if (liveClass.status === 'scheduled' && new Date(liveClass.scheduled_start) > new Date()) {
     await notifyStudents(liveClass, 'Live class cancelled', `"${liveClass.title}" has been cancelled.`, 'live_class_cancelled');
   }
+  await removeClassLectureIfEmpty(liveClass);
   await liveClass.destroy();
   return successResponse(res, { message: 'Live class deleted.' });
 };

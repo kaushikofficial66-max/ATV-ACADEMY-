@@ -8,6 +8,7 @@ import { fulfillOrder, revokeOrderAccess, revokeOrderCourses } from './orderServ
 import { enrollUser } from './enrollmentService.js';
 import { notifyAdmins } from './notificationService.js';
 import { sendNotificationEmail } from './mailService.js';
+import { plansByProductIds, allocateAmounts } from './storePlanService.js';
 import {
   WC_ORDER_STATUSES,
   getPaidStatuses,
@@ -115,19 +116,35 @@ export const parseWcOrder = (payload) => {
   };
 };
 
-/** Maps line items to LMS courses through courses.woocommerce_product_id (product or variation id). */
+/**
+ * Maps line items to LMS courses:
+ *  - a product linked to ONE course (courses.woocommerce_product_id, product or variation id), or
+ *  - a store PLAN product (store_plans.woocommerce_product_id) = ALL the courses of that plan; the line's
+ *    price is split between them by their revenue weights so the parts add up to the line exactly.
+ * Every entry is { line, course, allocSubtotal, allocTotal }; plan entries also carry { plan }.
+ */
 const resolveCourses = async (lineItems) => {
   const ids = [...new Set(lineItems.flatMap((li) => [li.productId, li.variationId]).filter(Boolean))];
   const courses = ids.length
     ? await Course.findAll({ where: { woocommerce_product_id: { [Op.in]: ids } }, attributes: ['id', 'title', 'woocommerce_product_id'] })
     : [];
   const byProduct = new Map(courses.map((c) => [Number(c.woocommerce_product_id), c]));
+  const plans = await plansByProductIds(ids);
   const mapped = [];
   const unmapped = [];
   for (const line of lineItems) {
     const course = byProduct.get(line.productId) || byProduct.get(line.variationId);
-    if (course) mapped.push({ line, course });
-    else unmapped.push(line);
+    const hit = plans.get(line.productId) || plans.get(line.variationId);
+    if (course) {
+      mapped.push({ line, course, allocSubtotal: line.subtotal, allocTotal: line.total });
+    } else if (hit && hit.entries.length) {
+      const weights = hit.entries.map((e) => e.weight);
+      const subtotals = allocateAmounts(line.subtotal, weights);
+      const totals = allocateAmounts(line.total, weights);
+      hit.entries.forEach((entry, i) => mapped.push({ line, course: entry.course, plan: hit.plan, allocSubtotal: subtotals[i], allocTotal: totals[i] }));
+    } else {
+      unmapped.push(line);
+    }
   }
   return { mapped, unmapped };
 };
@@ -269,14 +286,19 @@ const upsertMirror = (wcOrder, userId, mapped) =>
       // Only course lines are mirrored; they drive tutor earnings and course revenue.
       await OrderItem.destroy({ where: { order_id: order.id }, transaction });
       await OrderItem.bulkCreate(
-        mapped.map(({ line, course }) => ({
-          order_id: order.id,
-          course_id: course.id,
-          course_title: course.title,
-          price: line.subtotal,
-          discount_amount: toMoney(Math.max(0, line.subtotal - line.total)),
-          final_amount: line.total
-        })),
+        mapped.map(({ line, course, plan, allocSubtotal, allocTotal }) => {
+          const price = allocSubtotal ?? line.subtotal;
+          const final = allocTotal ?? line.total;
+          return {
+            order_id: order.id,
+            course_id: course.id,
+            store_plan_id: plan ? plan.id : null,
+            course_title: course.title,
+            price,
+            discount_amount: toMoney(Math.max(0, price - final)),
+            final_amount: final
+          };
+        }),
         { transaction }
       );
 

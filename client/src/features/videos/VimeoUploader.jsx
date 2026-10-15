@@ -1,11 +1,12 @@
 'use client';
 
 import { useRef, useState } from 'react';
-import { toast } from 'sonner';
+import { toast } from 'react-toastify';
 import { Upload as UploadIcon } from 'lucide-react';
 import { post, getErrorMessage } from '@/lib/api/client';
 import { manage } from '@/lib/api/endpoints';
-import { Button, Field, Input, ProgressBar, Select } from '@/components/ui';
+import { Button, Field, Input, ProgressBar } from '@/components/ui';
+import PlacementFields, { placementBody } from './PlacementFields';
 
 /**
  * Uploads a video straight from the browser to Vimeo:
@@ -23,13 +24,12 @@ export default function VimeoUploader({ role, courseId, sections = [], onUploade
 
   const start = async () => {
     if (!file || !target) return;
-    const [kind, id] = target.split(':');
     setProgress(0);
     try {
       const res = await post(manage(role).videoDirectUpload(courseId), {
         title: title || file.name.replace(/\.[^.]+$/, ''),
         upload_length: file.size,
-        ...(kind === 's' ? { section_id: Number(id), create_lecture: createLecture } : { lecture_id: Number(id) })
+        ...placementBody(target, createLecture)
       });
       const { Upload } = await import('tus-js-client');
       await new Promise((resolve, reject) => {
@@ -66,28 +66,7 @@ export default function VimeoUploader({ role, courseId, sections = [], onUploade
       <Field label="Title" htmlFor="video_title" hint="Defaults to the file name">
         <Input id="video_title" value={title} onChange={(e) => setTitle(e.target.value)} disabled={busy} />
       </Field>
-      <Field label="Place in" htmlFor="video_target" required>
-        <Select id="video_target" value={target} onChange={(e) => setTarget(e.target.value)} disabled={busy}>
-          <option value="">Select a section or lecture</option>
-          {sections.map((s) => (
-            <optgroup key={s.id} label={s.title}>
-              <option value={`s:${s.id}`}>{s.title} - new / unassigned</option>
-              {s.lectures.map((l) => (
-                <option key={l.id} value={`l:${l.id}`}>
-                  Lecture: {l.title}
-                  {l.video ? ' (replace video)' : ''}
-                </option>
-              ))}
-            </optgroup>
-          ))}
-        </Select>
-      </Field>
-      {target.startsWith('s:') && (
-        <label className="flex items-center gap-2 text-sm text-slate-700 sm:col-span-2">
-          <input type="checkbox" checked={createLecture} onChange={(e) => setCreateLecture(e.target.checked)} className="accent-brand-700" />
-          Create a new lecture for this video
-        </label>
-      )}
+      <PlacementFields sections={sections} target={target} onTarget={setTarget} createLecture={createLecture} onCreateLecture={setCreateLecture} disabled={busy} />
       {busy && (
         <div className="space-y-1 sm:col-span-2">
           <ProgressBar value={progress} />

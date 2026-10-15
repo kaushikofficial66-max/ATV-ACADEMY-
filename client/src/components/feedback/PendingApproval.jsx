@@ -3,10 +3,12 @@
 import { Clock } from 'lucide-react';
 import { Button } from '@/components/ui';
 import { useAuth } from '@/features/auth/AuthProvider';
+import { useConfirmLogout } from '@/features/auth/useConfirmLogout';
 
 /** Shown to tutors whose account is waiting for admin approval. */
 export default function PendingApproval() {
-  const { user, logout, refresh } = useAuth();
+  const { user, refresh } = useAuth();
+  const logout = useConfirmLogout();
   return (
     <div className="flex min-h-screen items-center justify-center bg-slate-50 px-4">
       <div className="max-w-md rounded-xl border border-slate-200 bg-white p-8 text-center shadow-sm">

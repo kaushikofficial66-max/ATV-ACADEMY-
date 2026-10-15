@@ -1,35 +1,37 @@
 'use client';
 
-import { patch, post } from '@/lib/api/client';
-import { EP } from '@/lib/api/endpoints';
+import { useRouter } from 'next/navigation';
 import { Badge, Button, PageHeader, StatusBadge } from '@/components/ui';
+import { EP } from '@/lib/api/endpoints';
 import ResourceList from '@/components/data/ResourceList';
-import { useApiMutation } from '@/hooks/useApiMutation';
 import { useStoreCommerce } from '@/features/commerce/useStoreCommerce';
-import { formatDateTime, formatPrice, fullName } from '@/lib/utils';
+import { canMarkPaid, canRefund, isStoreOrder, useOrderActions } from '@/features/admin/useOrderActions';
+import { formatDateTime, formatPrice, fullName, humanize } from '@/lib/utils';
 
 const KEY = ['admin', 'orders'];
+const SOURCE_BADGE = { woocommerce: ['Store', 'blue'], website: ['Website', 'green'], lms: ['LMS', 'gray'] };
+
+/** The payment that counts for a row: the successful one, else the latest attempt. */
+const mainPayment = (o) => o.payments?.find((p) => p.status === 'success') || o.payments?.[0];
 
 /**
  * Store (WooCommerce) orders are mirrors: payments, cancellations and refunds
  * are done in WooCommerce and synced here. Only legacy LMS orders can be
- * marked paid or refunded from this page.
+ * marked paid or refunded. Click an order to see everything about it.
  */
 export default function AdminOrdersPage() {
+  const router = useRouter();
   const store = useStoreCommerce();
-  const setStatus = useApiMutation(({ id, status }) => patch(EP.admin.orderStatus(id), { status }), { invalidate: [KEY] });
-  const refund = useApiMutation((id) => post(EP.admin.orderRefund(id), { reason: prompt('Refund reason?') || undefined }), { invalidate: [KEY] });
-  const resync = useApiMutation((wcOrderId) => post(EP.admin.wooSyncOrder(wcOrderId)), { invalidate: [KEY] });
-  const reconcile = useApiMutation(() => post(EP.admin.wooReconcile, {}), { invalidate: [KEY] });
+  const actions = useOrderActions();
 
   return (
     <>
       <PageHeader
         title="Orders"
-        description={store.enabled ? 'Store orders are managed in WooCommerce and synced here automatically.' : undefined}
+        description={store.enabled ? 'Store orders are managed in WooCommerce and synced here automatically. Click an order for full details.' : 'Click an order for full details.'}
         actions={
           store.enabled && (
-            <Button variant="secondary" loading={reconcile.isPending} onClick={() => reconcile.mutate()}>
+            <Button variant="secondary" loading={actions.reconciling} onClick={actions.reconcile}>
               Sync recent store orders
             </Button>
           )
@@ -40,22 +42,26 @@ export default function AdminOrdersPage() {
         endpoint={EP.admin.orders}
         dataKey="orders"
         searchPlaceholder="Order number (e.g. WC-1048)..."
+        onRowClick={(o) => router.push(`/admin/orders/${o.id}`)}
         filters={[
           { name: 'status', label: 'Status', options: ['paid', 'pending', 'failed', 'cancelled', 'refunded'] },
-          { name: 'source', label: 'Source', options: ['woocommerce', 'lms'] }
+          { name: 'source', label: 'Source', options: ['woocommerce', 'website', 'lms'] }
         ]}
         columns={[
           {
             key: 'order_number',
             header: 'Order',
-            render: (o) => (
-              <div>
-                <span className="font-mono text-xs">{o.order_number}</span>
-                <div className="mt-1">
-                  <Badge tone={o.source === 'woocommerce' ? 'blue' : 'gray'}>{o.source === 'woocommerce' ? 'Store' : 'LMS'}</Badge>
+            render: (o) => {
+              const [label, tone] = SOURCE_BADGE[o.source] || [humanize(o.source), 'gray'];
+              return (
+                <div>
+                  <span className="font-mono text-xs">{o.order_number}</span>
+                  <div className="mt-1">
+                    <Badge tone={tone}>{label}</Badge>
+                  </div>
                 </div>
-              </div>
-            )
+              );
+            }
           },
           {
             key: 'user',
@@ -64,6 +70,7 @@ export default function AdminOrdersPage() {
               <div>
                 <p className="text-slate-900">{fullName(o.user)}</p>
                 <p className="text-xs text-slate-500">{o.user?.email}</p>
+                {o.user?.phone && <p className="text-xs text-slate-500">{o.user.phone}</p>}
               </div>
             )
           },
@@ -80,6 +87,23 @@ export default function AdminOrdersPage() {
           },
           { key: 'total_amount', header: 'Total', render: (o) => formatPrice(o.total_amount) },
           {
+            key: 'payment',
+            header: 'Payment',
+            render: (o) => {
+              const p = mainPayment(o);
+              if (!p) return <span className="text-slate-400">-</span>;
+              return (
+                <div className="max-w-[11rem]">
+                  <p className="text-slate-900">
+                    {humanize(p.payment_gateway || 'payment')}
+                    {p.payment_method ? ` · ${humanize(p.payment_method)}` : ''}
+                  </p>
+                  {p.gateway_payment_id && <p className="truncate font-mono text-[11px] text-slate-500">{p.gateway_payment_id}</p>}
+                </div>
+              );
+            }
+          },
+          {
             key: 'status',
             header: 'Status',
             render: (o) => (
@@ -93,27 +117,28 @@ export default function AdminOrdersPage() {
           {
             key: 'actions',
             header: '',
-            render: (o) =>
-              o.source === 'woocommerce' ? (
-                <div className="flex justify-end">
-                  <Button size="sm" variant="ghost" loading={resync.isPending && resync.variables === o.woocommerce_order_id} onClick={() => resync.mutate(o.woocommerce_order_id)}>
+            render: (o) => (
+              <div className="flex justify-end gap-1" onClick={(e) => e.stopPropagation()}>
+                <Button size="sm" variant="secondary" href={`/admin/orders/${o.id}`}>
+                  View
+                </Button>
+                {isStoreOrder(o) && (
+                  <Button size="sm" variant="ghost" loading={actions.resyncing(o)} onClick={() => actions.resync(o)}>
                     Resync
                   </Button>
-                </div>
-              ) : (
-                <div className="flex justify-end gap-1">
-                  {['pending', 'failed'].includes(o.status) && (
-                    <Button size="sm" variant="ghost" onClick={() => confirm('Mark as paid and enroll the student?') && setStatus.mutate({ id: o.id, status: 'paid' })}>
-                      Mark paid
-                    </Button>
-                  )}
-                  {o.status === 'paid' && Number(o.total_amount) > 0 && (
-                    <Button size="sm" variant="ghost" onClick={() => confirm('Refund this order? Access to the courses is removed.') && refund.mutate(o.id)}>
-                      Refund
-                    </Button>
-                  )}
-                </div>
-              )
+                )}
+                {canMarkPaid(o) && (
+                  <Button size="sm" variant="ghost" onClick={() => actions.markPaid(o)}>
+                    Mark paid
+                  </Button>
+                )}
+                {canRefund(o) && (
+                  <Button size="sm" variant="ghost" onClick={() => actions.refund(o)}>
+                    Refund
+                  </Button>
+                )}
+              </div>
+            )
           }
         ]}
       />

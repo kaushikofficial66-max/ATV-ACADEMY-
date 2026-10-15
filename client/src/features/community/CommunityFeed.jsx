@@ -10,6 +10,7 @@ import { QueryState, EmptyState } from '@/components/feedback/States';
 import { Loader } from '@/components/feedback/Loader';
 import { useApiMutation } from '@/hooks/useApiMutation';
 import { assetUrl, cn, formatDateTime, fullName } from '@/lib/utils';
+import { useConfirm } from '@/components/feedback/ConfirmProvider';
 
 const KEY = ['community'];
 
@@ -112,6 +113,7 @@ function Composer({ courses, defaultCourseId }) {
 }
 
 function PostCard({ post: p }) {
+  const ask = useConfirm();
   const [open, setOpen] = useState(false);
   const [comment, setComment] = useState('');
   const like = useApiMutation(() => post(EP.community.like(p.id)), { invalidate: [KEY], silent: true });
@@ -141,7 +143,7 @@ function PostCard({ post: p }) {
           <p className="text-xs text-slate-400">{formatDateTime(p.created_at)}</p>
         </div>
         {p.can_delete && (
-          <Button size="sm" variant="ghost" onClick={() => confirm('Delete this post?') && remove.mutate()} aria-label="Delete post">
+          <Button size="sm" variant="ghost" onClick={async () => (await ask({ title: 'Delete post?', message: 'This post will be deleted.', confirmLabel: 'Delete' })) && remove.mutate()} aria-label="Delete post">
             <Trash2 className="size-4" />
           </Button>
         )}

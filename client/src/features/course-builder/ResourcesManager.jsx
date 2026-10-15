@@ -11,6 +11,7 @@ import { Loader } from '@/components/feedback/Loader';
 import { useApiMutation } from '@/hooks/useApiMutation';
 import { builderKeys } from './keys';
 import { formatDate } from '@/lib/utils';
+import { useConfirm } from '@/components/feedback/ConfirmProvider';
 
 const formatSize = (bytes) => (bytes ? `${(bytes / 1024 / 1024).toFixed(bytes > 1024 * 1024 ? 1 : 2)} MB` : '-');
 
@@ -18,6 +19,7 @@ const formatSize = (bytes) => (bytes ? `${(bytes / 1024 / 1024).toFixed(bytes > 
 export default function ResourcesManager({ role, courseId }) {
   const m = manage(role);
   const key = builderKeys.resources(role, courseId);
+  const ask = useConfirm();
   const [file, setFile] = useState(null);
   const [title, setTitle] = useState('');
   const [lectureId, setLectureId] = useState('');
@@ -103,7 +105,7 @@ export default function ResourcesManager({ role, courseId }) {
                       <Button size="sm" variant="ghost" onClick={() => downloadFile(`${m.resource(r.id)}/download`, r.file_name)}>
                         Download
                       </Button>
-                      <Button size="sm" variant="ghost" onClick={() => confirm('Delete this resource?') && remove.mutate(r.id)} aria-label="Delete resource">
+                      <Button size="sm" variant="ghost" onClick={async () => (await ask({ title: 'Delete resource?', message: 'This resource will be deleted.', confirmLabel: 'Delete' })) && remove.mutate(r.id)} aria-label="Delete resource">
                         <Trash2 className="size-4" />
                       </Button>
                     </div>

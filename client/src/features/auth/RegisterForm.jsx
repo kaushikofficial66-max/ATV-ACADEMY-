@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { toast } from 'sonner';
+import { toast } from 'react-toastify';
 import { Button, Field, Input, Select } from '@/components/ui';
 import { useAuth } from './AuthProvider';
 import { registerSchema } from './schemas';

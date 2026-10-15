@@ -9,6 +9,7 @@ import { QueryState } from '@/components/feedback/States';
 import { Loader } from '@/components/feedback/Loader';
 import { useApiMutation } from '@/hooks/useApiMutation';
 import { builderKeys } from './keys';
+import { useConfirm } from '@/components/feedback/ConfirmProvider';
 
 /**
  * The course's final project. Students unlock it at the progress cap (90%)
@@ -29,6 +30,7 @@ export default function ProjectManager({ role, courseId }) {
 function ProjectForm({ role, courseId, project }) {
   const m = manage(role);
   const invalidate = [builderKeys.projects(role, courseId), builderKeys.course(role, courseId)];
+  const ask = useConfirm();
   const [v, setV] = useState({
     title: project?.title || '',
     instructions: project?.instructions || '',
@@ -80,7 +82,7 @@ function ProjectForm({ role, courseId, project }) {
             Save project
           </Button>
           {project && (
-            <Button type="button" variant="ghost" onClick={() => confirm('Delete the final project?') && remove.mutate()}>
+            <Button type="button" variant="ghost" onClick={async () => (await ask({ title: 'Delete final project?', message: 'The final project will be deleted.', confirmLabel: 'Delete' })) && remove.mutate()}>
               Delete
             </Button>
           )}

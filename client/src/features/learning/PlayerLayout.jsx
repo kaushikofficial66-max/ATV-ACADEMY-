@@ -9,13 +9,15 @@ import { useAuth } from '@/features/auth/AuthProvider';
 import { Avatar } from '@/components/ui';
 import { fullName } from '@/lib/utils';
 import ModuleList from './ModuleList';
+import { useConfirmLogout } from '@/features/auth/useConfirmLogout';
 
 /**
  * Full-screen course player layout: logo + module list on the left (drawer on phones), a slim top
  * bar with the back arrow and course title, and the lecture on the right.
  */
 export default function PlayerLayout({ courseId, courseTitle, curriculum, activeLectureId, children }) {
-  const { user, logout } = useAuth();
+  const { user } = useAuth();
+  const logout = useConfirmLogout();
   const [open, setOpen] = useState(false);
 
   const list = (

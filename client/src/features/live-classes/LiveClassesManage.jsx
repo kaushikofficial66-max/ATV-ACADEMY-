@@ -3,11 +3,11 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
-import { toast } from 'sonner';
+import { toast } from 'react-toastify';
 import { Plus } from 'lucide-react';
 import { get, post, patch, del, getErrorMessage } from '@/lib/api/client';
 import { EP, manage } from '@/lib/api/endpoints';
-import { Button, Field, Input, PageHeader, Select, StatusBadge, Textarea } from '@/components/ui';
+import { Badge, Button, Field, Input, PageHeader, Select, StatusBadge, Textarea } from '@/components/ui';
 import Modal from '@/components/ui/Modal';
 import ResourceList from '@/components/data/ResourceList';
 import TutorPicker from '@/components/data/TutorPicker';
@@ -15,11 +15,32 @@ import { useAuth } from '@/features/auth/AuthProvider';
 import { useApiMutation } from '@/hooks/useApiMutation';
 import { builderKeys } from '@/features/course-builder/keys';
 import { formatDateTime, fullName } from '@/lib/utils';
+import { useConfirm } from '@/components/feedback/ConfirmProvider';
 
 /** Schedule Zoom classes, start them as host, change status. */
+/** Where the automatic Zoom -> Vimeo recording of a class stands. */
+const RECORDING = {
+  pending: { tone: 'amber', label: 'Waiting for class to end' },
+  uploading: { tone: 'blue', label: 'Uploading to Vimeo' },
+  uploaded: { tone: 'green', label: 'On Vimeo' },
+  failed: { tone: 'red', label: 'Failed' }
+};
+
+function RecordingBadge({ liveClass: c }) {
+  const info = RECORDING[c.recording_status];
+  if (!info) return <span className="text-slate-400">-</span>;
+  const label = c.recording_status === 'pending' && c.status === 'completed' ? 'Processing at Zoom' : info.label;
+  return (
+    <span title={c.recording_error || undefined}>
+      <Badge tone={info.tone}>{label}</Badge>
+    </span>
+  );
+}
+
 export default function LiveClassesManage({ role }) {
   const m = manage(role);
   const key = builderKeys.liveClasses(role);
+  const ask = useConfirm();
   const [creating, setCreating] = useState(false);
   const setStatus = useApiMutation(({ id, status }) => patch(m.liveClassStatus(id), { status }), { invalidate: [key] });
   const remove = useApiMutation((id) => del(m.liveClass(id)), { invalidate: [key] });
@@ -68,6 +89,7 @@ export default function LiveClassesManage({ role }) {
           },
           { key: 'scheduled_start', header: 'Starts', render: (c) => formatDateTime(c.scheduled_start) },
           { key: 'status', header: 'Status', render: (c) => <StatusBadge status={c.status} /> },
+          { key: 'recording', header: 'Recording', render: (c) => <RecordingBadge liveClass={c} /> },
           {
             key: 'actions',
             header: '',
@@ -78,13 +100,17 @@ export default function LiveClassesManage({ role }) {
                     <Button size="sm" onClick={() => start(c)}>
                       Start
                     </Button>
-                    <Button size="sm" variant="ghost" onClick={() => setStatus.mutate({ id: c.id, status: c.status === 'live' ? 'completed' : 'cancelled' })}>
+                    <Button size="sm" variant="ghost" onClick={async () => {
+                      const ending = c.status === 'live';
+                      const ok = await ask({ title: ending ? 'End this class?' : 'Cancel this class?', message: ending ? 'The live class will be marked as completed.' : 'Students will no longer be able to join.', confirmLabel: ending ? 'End class' : 'Cancel class', cancelLabel: 'Go back', tone: 'warning' });
+                      if (ok) setStatus.mutate({ id: c.id, status: ending ? 'completed' : 'cancelled' });
+                    }}>
                       {c.status === 'live' ? 'End' : 'Cancel'}
                     </Button>
                   </>
                 )}
                 {c.status !== 'live' && (
-                  <Button size="sm" variant="ghost" onClick={() => confirm('Delete this class?') && remove.mutate(c.id)}>
+                  <Button size="sm" variant="ghost" onClick={async () => (await ask({ title: 'Delete class?', message: 'This class will be deleted.', confirmLabel: 'Delete' })) && remove.mutate(c.id)}>
                     Delete
                   </Button>
                 )}
@@ -108,7 +134,7 @@ function LiveClassForm({ role, onDone }) {
     queryKey: builderKeys.courses(role).concat('options'),
     queryFn: () => get(isAdmin ? EP.admin.courses : m.courses, { limit: 100 }).then((r) => r.data.courses)
   });
-  const [v, setV] = useState({ course_id: '', title: '', description: '', scheduled_start: '', scheduled_end: '', zoom_join_url: '' });
+  const [v, setV] = useState({ course_id: '', section_id: '', title: '', description: '', scheduled_start: '', scheduled_end: '', zoom_join_url: '' });
   const [picked, setPicked] = useState({ ids: [], mainId: null });
   const set = (k) => (e) => setV((s) => ({ ...s, [k]: e.target.value }));
 
@@ -120,10 +146,17 @@ function LiveClassForm({ role, onDone }) {
   });
 
   const selectCourse = (e) => {
-    setV((s) => ({ ...s, course_id: e.target.value }));
+    setV((s) => ({ ...s, course_id: e.target.value, section_id: '' }));
     // A tutor scheduling a class is always its host; admins choose.
     setPicked(isAdmin ? { ids: [], mainId: null } : { ids: [user.id], mainId: user.id });
   };
+
+  // The course's modules (topics): the class and its recording are placed in one of them.
+  const modules = useQuery({
+    queryKey: builderKeys.curriculum(role, v.course_id),
+    queryFn: () => get(m.curriculum(v.course_id)).then((r) => r.data.sections),
+    enabled: Boolean(v.course_id)
+  });
 
   // Admin with a single-tutor course: that tutor is preselected.
   const tutors = courseTutors.data || [];
@@ -133,6 +166,7 @@ function LiveClassForm({ role, onDone }) {
     () =>
       post(m.liveClasses, {
         ...v,
+        section_id: v.section_id || undefined,
         scheduled_start: new Date(v.scheduled_start).toISOString(),
         scheduled_end: new Date(v.scheduled_end).toISOString(),
         zoom_join_url: v.zoom_join_url || undefined,
@@ -159,6 +193,26 @@ function LiveClassForm({ role, onDone }) {
             </option>
           ))}
         </Select>
+      </Field>
+      <Field
+        label="Place in"
+        htmlFor="lc_section"
+        required
+        hint="Choose the topic (module) of the course. Students will see this class there with a LIVE badge, and its recording is added to it afterwards."
+        className="sm:col-span-2"
+      >
+        <Select id="lc_section" value={v.section_id} onChange={set('section_id')} required disabled={!v.course_id || modules.isPending}>
+          <option value="">{!v.course_id ? 'Select a course first' : modules.isPending ? 'Loading modules...' : 'Select a module'}</option>
+          {(modules.data || []).map((sec) => (
+            <option key={sec.id} value={sec.id}>
+              {sec.title}
+              {sec.status === 'inactive' ? ' (hidden from students)' : ''}
+            </option>
+          ))}
+        </Select>
+        {v.course_id && modules.isSuccess && !modules.data.length && (
+          <p className="mt-1.5 text-xs text-amber-700">This course has no modules yet. Add one in the course Curriculum first.</p>
+        )}
       </Field>
       {v.course_id && (
         <Field

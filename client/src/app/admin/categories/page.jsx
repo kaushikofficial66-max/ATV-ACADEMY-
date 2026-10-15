@@ -9,10 +9,12 @@ import Modal from '@/components/ui/Modal';
 import ResourceList from '@/components/data/ResourceList';
 import { useApiMutation } from '@/hooks/useApiMutation';
 import { assetUrl } from '@/lib/utils';
+import { useConfirm } from '@/components/feedback/ConfirmProvider';
 
 const KEY = ['admin', 'categories'];
 
 export default function AdminCategoriesPage() {
+  const ask = useConfirm();
   const [editing, setEditing] = useState(null);
   const remove = useApiMutation((id) => del(EP.admin.category(id)), { invalidate: [KEY, ['public', 'categories']] });
 
@@ -56,9 +58,9 @@ export default function AdminCategoriesPage() {
               <Button
                 size="sm"
                 variant="ghost"
-                onClick={(e) => {
+                onClick={async (e) => {
                   e.stopPropagation();
-                  if (confirm(`Delete "${c.name}"?`)) remove.mutate(c.id);
+                  if (await ask({ title: 'Delete category?', message: `"${c.name}" will be deleted.`, confirmLabel: 'Delete' })) remove.mutate(c.id);
                 }}
               >
                 Delete

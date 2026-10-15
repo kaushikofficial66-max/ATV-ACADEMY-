@@ -15,7 +15,8 @@ import {
   Project,
   ProjectSubmission,
   Certificate,
-  User
+  User,
+  LiveClass
 } from '../../models/index.js';
 import { successResponse } from '../../utils/apiResponse.js';
 import ApiError from '../../utils/ApiError.js';
@@ -150,7 +151,8 @@ export const getCoursePlayer = async (req, res) => {
         include: [
           { model: RecordedVideo, as: 'video', required: false, where: { status: { [Op.in]: PLAYABLE_VIDEO } }, attributes: ['id', 'title', 'duration_seconds', 'thumbnail_url'] },
           { model: CourseResource, as: 'resources', required: false, where: { status: 'active' }, attributes: ['id', 'title', 'file_name', 'file_type', 'file_size'] },
-          { model: Quiz, as: 'quizzes', required: false, where: { status: 'published' }, attributes: ['id', 'title'] }
+          { model: Quiz, as: 'quizzes', required: false, where: { status: 'published' }, attributes: ['id', 'title'] },
+          { model: LiveClass, as: 'liveClass', required: false, attributes: ['id', 'status', 'scheduled_start', 'scheduled_end', 'timezone'] }
         ]
       }
     ],
@@ -286,6 +288,8 @@ export const getLecture = async (req, res) => {
     LectureProgress.findOne({ where: { user_id: req.user.id, lecture_id: lecture.id } })
   ]);
 
+  const liveClass = lecture.lecture_type === 'live_class' ? await LiveClass.findOne({ where: { lecture_id: lecture.id }, attributes: ['id', 'status', 'scheduled_start', 'scheduled_end', 'timezone'] }) : null;
+
   let videoData = null;
   if (video) {
     const vp = await VideoProgress.findOne({ where: { user_id: req.user.id, video_id: video.id } });
@@ -331,7 +335,8 @@ export const getLecture = async (req, res) => {
         duration_seconds: lecture.duration_seconds,
         is_preview: lecture.is_preview,
         section: { id: lecture.section.id, title: lecture.section.title },
-        course_id: courseId
+        course_id: courseId,
+        live_class: liveClass ? liveClass.toJSON() : null
       },
       video: videoData,
       resources,

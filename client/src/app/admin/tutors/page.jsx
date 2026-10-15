@@ -1,13 +1,15 @@
 'use client';
 
-import { Suspense } from 'react';
+import { Suspense, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { patch } from '@/lib/api/client';
 import { EP } from '@/lib/api/endpoints';
 import { Avatar, Button, PageHeader, StatusBadge } from '@/components/ui';
 import ResourceList from '@/components/data/ResourceList';
 import { useApiMutation } from '@/hooks/useApiMutation';
-import { formatDate, fullName } from '@/lib/utils';
+import TutorInfoModal from '@/features/admin/TutorInfoModal';
+import { formatDate, formatDateTime, fullName } from '@/lib/utils';
+import { useConfirm } from '@/components/feedback/ConfirmProvider';
 
 const KEY = ['admin', 'tutors'];
 
@@ -21,6 +23,8 @@ export default function AdminTutorsPage() {
 
 function TutorsList() {
   const params = useSearchParams();
+  const ask = useConfirm();
+  const [infoId, setInfoId] = useState(null);
   const review = useApiMutation(({ id, action, reason }) => patch(EP.admin.tutorApproval(id), { action, reason }), { invalidate: [KEY, ['admin', 'dashboard']] });
   const setStatus = useApiMutation(({ id, status }) => patch(EP.admin.userStatus(id), { status }), { invalidate: [KEY] });
 
@@ -51,6 +55,8 @@ function TutorsList() {
           { key: 'bio', header: 'About', render: (u) => <span className="line-clamp-2 max-w-xs text-xs">{u.profile?.bio || '-'}</span> },
           { key: 'course_count', header: 'Courses' },
           { key: 'student_count', header: 'Students' },
+          { key: 'classes_taken', header: 'Classes taken', render: (u) => u.classes_taken ?? 0 },
+          { key: 'last_login_at', header: 'Last login', render: (u) => (u.last_login_at ? formatDateTime(u.last_login_at) : 'Never') },
           { key: 'status', header: 'Status', render: (u) => <StatusBadge status={u.status} /> },
           { key: 'created_at', header: 'Applied', render: (u) => formatDate(u.created_at) },
           {
@@ -59,15 +65,24 @@ function TutorsList() {
             render: (u) =>
               u.status === 'pending' ? (
                 <div className="flex justify-end gap-1">
+                  <Button size="sm" variant="secondary" onClick={() => setInfoId(u.id)}>
+                    More info
+                  </Button>
                   <Button size="sm" onClick={() => review.mutate({ id: u.id, action: 'approve' })}>
                     Approve
                   </Button>
-                  <Button size="sm" variant="ghost" onClick={() => review.mutate({ id: u.id, action: 'reject', reason: prompt('Reason (sent to the applicant)?') || undefined })}>
+                  <Button size="sm" variant="ghost" onClick={async () => {
+                      const r = await ask({ title: 'Reject this application?', message: 'The applicant is told it was not approved.', confirmLabel: 'Reject', input: { label: 'Reason (sent to the applicant)' } });
+                      if (r) review.mutate({ id: u.id, action: 'reject', reason: r.value || undefined });
+                    }}>
                     Reject
                   </Button>
                 </div>
               ) : (
-                <div className="flex justify-end">
+                <div className="flex justify-end gap-1">
+                  <Button size="sm" onClick={() => setInfoId(u.id)}>
+                    More info
+                  </Button>
                   <Button size="sm" variant="ghost" onClick={() => setStatus.mutate({ id: u.id, status: u.status === 'blocked' ? 'active' : 'blocked' })}>
                     {u.status === 'blocked' ? 'Unblock' : 'Block'}
                   </Button>
@@ -76,6 +91,7 @@ function TutorsList() {
           }
         ]}
       />
+      <TutorInfoModal tutorId={infoId} onClose={() => setInfoId(null)} />
     </>
   );
 }

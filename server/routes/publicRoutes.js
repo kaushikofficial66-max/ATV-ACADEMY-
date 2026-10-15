@@ -11,6 +11,7 @@ import {
   listPages,
   getPage,
   getSiteSettings,
+  getStorePlans,
   verifyCertificate
 } from '../controllers/publicController.js';
 import { optionalAuth } from '../middlewares/auth.js';
@@ -23,6 +24,7 @@ router.use(optionalAuth);
 router.get('/home', getHomepage);
 router.get('/contents/:sectionKey', getContentBlock);
 router.get('/settings', getSiteSettings);
+router.get('/store-plans', getStorePlans);
 
 router.get('/categories', getCategories);
 router.get('/courses', listCourses);
