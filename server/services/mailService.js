@@ -27,12 +27,12 @@ const escapeHtml = (str = '') =>
   String(str).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 
 /** Wraps plain text / simple HTML in the branded layout. */
-const layout = async (title, bodyHtml) => {
+const layout = async (title, bodyHtml, { logoUrl = '' } = {}) => {
   const siteName = await getSetting('site_name');
   return `<!doctype html><html><body style="margin:0;background:#f4f5f7;font-family:Arial,Helvetica,sans-serif;color:#1f2933">
   <table width="100%" cellpadding="0" cellspacing="0" style="padding:24px 0"><tr><td align="center">
   <table width="600" cellpadding="0" cellspacing="0" style="background:#fff;border-radius:8px;overflow:hidden">
-  <tr><td style="background:#5b21b6;color:#fff;padding:18px 24px;font-size:20px;font-weight:bold">${escapeHtml(siteName)}</td></tr>
+  <tr><td style="background:#5b21b6;color:#fff;padding:18px 24px;font-size:20px;font-weight:bold">${logoUrl ? `<img src="${escapeHtml(logoUrl)}" alt="${escapeHtml(siteName)}" height="40" style="display:block;height:40px;width:auto;border:0">` : escapeHtml(siteName)}</td></tr>
   <tr><td style="padding:24px"><h2 style="margin-top:0;font-size:18px">${escapeHtml(title)}</h2>${bodyHtml}</td></tr>
   <tr><td style="padding:16px 24px;font-size:12px;color:#7b8794;border-top:1px solid #e4e7eb">This email was sent by ${escapeHtml(siteName)}.</td></tr>
   </table></td></tr></table></body></html>`;
@@ -46,7 +46,7 @@ const button = (url, label) =>
  * Sends an email. Returns { sent, messageId?, error? } and never throws, so
  * callers (registration, notifications) are not broken by SMTP outages.
  */
-export const sendMail = async ({ to, subject, html, text }) => {
+export const sendMail = async ({ to, subject, html, text, attachments }) => {
   try {
     const { transporter: tx, cfg } = await getTransporter();
     if (!tx) {
@@ -59,7 +59,8 @@ export const sendMail = async ({ to, subject, html, text }) => {
       to,
       subject,
       html,
-      text
+      text,
+      ...(attachments?.length ? { attachments } : {})
     });
     return { sent: true, messageId: info.messageId };
   } catch (error) {
@@ -110,8 +111,28 @@ export const sendNotificationEmail = async (user, title, message, url = null) =>
     )
   });
 
+/** Payment confirmation with the GST invoice (PDF) attached. */
+export const sendInvoiceEmail = async ({ to, name, invoiceNumber, total, courses = [], pdf, fileName, logoUrl = '' }) =>
+  sendMail({
+    to,
+    subject: `Your invoice ${invoiceNumber}`,
+    text: `Hi ${name}, thank you for your purchase. Your GST invoice ${invoiceNumber} for ${total} is attached.`,
+    html: await layout(
+      'Your invoice',
+      `<p>Hi ${escapeHtml(name)},</p><p>Thank you for your purchase! Your GST invoice is attached to this email as a PDF.</p>
+      <table cellpadding="0" cellspacing="0" style="margin:16px 0;font-size:14px">
+      <tr><td style="padding:3px 16px 3px 0;color:#7b8794">Invoice no.</td><td><strong>${escapeHtml(invoiceNumber)}</strong></td></tr>
+      <tr><td style="padding:3px 16px 3px 0;color:#7b8794">Course</td><td>${escapeHtml(courses.join(', '))}</td></tr>
+      <tr><td style="padding:3px 16px 3px 0;color:#7b8794">Amount paid</td><td><strong>${escapeHtml(total)}</strong> (incl. GST)</td></tr></table>
+      <p style="font-size:13px;color:#7b8794">Keep this invoice for your records. If any detail (name, state, pincode) is wrong, reply to this email and we will correct it.</p>`,
+      { logoUrl }
+    ),
+    attachments: [{ filename: fileName, content: pdf, contentType: 'application/pdf' }]
+  });
+
 export default {
   sendMail,
+  sendInvoiceEmail,
   sendPlainMessage,
   sendVerificationEmail,
   sendPasswordResetEmail,

@@ -74,6 +74,24 @@ export const SETTING_DEFINITIONS = {
   mail_from_name: { group: 'email', env: 'MAIL_FROM_NAME', default: 'ATV Academy' },
   mail_from_address: { group: 'email', env: 'MAIL_FROM_ADDRESS', default: '' },
 
+  // GST invoice emailed to the buyer after a successful payment. Course prices are GST-inclusive: the invoice
+  // splits the paid amount into taxable value + CGST/SGST (buyer in the seller's state) or IGST (other states).
+  invoice_enabled: { group: 'invoice', default: 'true', type: 'boolean' },
+  invoice_company_name: { group: 'invoice', default: 'Antariksh TV' },
+  invoice_company_address: { group: 'invoice', default: 'Flat No. 201/202, Shyam Kunj, Devnagar, Baradwari, Sakchi, Jamshedpur, Jharkhand 831001' },
+  invoice_gstin: { group: 'invoice', default: '' },
+  // GST state code of the seller (20 = Jharkhand, 27 = Maharashtra, 07 = Delhi ...).
+  invoice_state_code: { group: 'invoice', default: '20' },
+  invoice_gst_rate: { group: 'invoice', default: '18', type: 'number' },
+  // 999293 = commercial training and coaching services.
+  invoice_sac_code: { group: 'invoice', default: '999293' },
+  invoice_number_prefix: { group: 'invoice', default: 'ATV' },
+  // Logo printed in the invoice header (PNG or JPG, public URL). Empty = the site logo (General), then the company name as text.
+  invoice_show_logo: { group: 'invoice', default: 'true', type: 'boolean' },
+  invoice_logo_url: { group: 'invoice', default: 'https://antarikshtv.com/wp-content/uploads/2026/06/Logo.png' },
+  // Header band colour behind the logo. The default suits the white ATV logo; use #FFFFFF with a dark logo.
+  invoice_header_color: { group: 'invoice', default: '#5b21b6' },
+
   // WhatsApp (Meta WhatsApp Cloud API)
   whatsapp_enabled: { group: 'whatsapp', default: 'true', type: 'boolean' },
   whatsapp_api_version: { group: 'whatsapp', env: 'WHATSAPP_API_VERSION', default: 'v21.0' },
@@ -118,7 +136,7 @@ export const SETTING_DEFINITIONS = {
   cloudflare_r2_public_url: { group: 'storage', env: 'CLOUDFLARE_R2_PUBLIC_URL', default: '' }
 };
 
-export const SETTING_GROUPS = ['general', 'payment', 'woocommerce', 'email', 'whatsapp', 'zoom', 'storage'];
+export const SETTING_GROUPS = ['general', 'payment', 'woocommerce', 'invoice', 'email', 'whatsapp', 'zoom', 'storage'];
 
 const CACHE_TTL_MS = 60 * 1000;
 let cache = null;

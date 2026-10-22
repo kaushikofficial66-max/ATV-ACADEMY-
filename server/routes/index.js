@@ -29,6 +29,7 @@ router.get('/', (req, res) => {
       { path: '/media', description: 'Signed, range-enabled recorded video streaming' },
       { path: '/integrations/site', description: 'Signed read-only orders / payments feed for the antarikshtv.com wp-admin' },
       { path: '/webhooks/atv-site', description: 'Paid orders pushed by the antarikshtv.com checkout (HMAC signed)' },
+      { path: '/webhooks/atv-site/poke', description: 'Instant order sync poke from the antarikshtv.com plugin (HMAC signed)' },
       { path: '/webhooks/razorpay', description: 'Razorpay payment webhook (legacy LMS checkout)' },
       { path: '/webhooks/woocommerce', description: 'WooCommerce order webhook (store purchases -> enrollment)' }
     ],

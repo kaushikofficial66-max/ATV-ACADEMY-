@@ -8,6 +8,7 @@ import { fulfillOrder, revokeOrderAccess, revokeOrderCourses } from './orderServ
 import { enrollUser } from './enrollmentService.js';
 import { notifyAdmins } from './notificationService.js';
 import { sendNotificationEmail } from './mailService.js';
+import { issueAndSendInvoice, normalizeStateCode, stateName } from './invoiceService.js';
 import { plansByProductIds, allocateAmounts } from './storePlanService.js';
 import {
   WC_ORDER_STATUSES,
@@ -65,7 +66,7 @@ const clip = (value, max) => {
 /**
  * Validates the parts of a WooCommerce order payload (REST v3 shape, as sent by
  * order.* webhooks) the LMS relies on. Only learning-relevant fields are kept:
- * no addresses or other billing details beyond name / email / phone.
+ * no street addresses; state / city / pincode are kept for the GST invoice.
  */
 export const parseWcOrder = (payload) => {
   if (!payload || typeof payload !== 'object' || Array.isArray(payload)) throw ApiError.badRequest('Invalid WooCommerce order payload.');
@@ -90,6 +91,9 @@ export const parseWcOrder = (payload) => {
     firstName: clip(billing.first_name, 100),
     lastName: clip(billing.last_name, 100),
     phone: phone.length >= 6 ? phone.slice(0, 20) : null,
+    billingStateCode: String(billing.country || 'IN').toUpperCase() === 'IN' ? normalizeStateCode(billing.state) : null,
+    billingCity: clip(billing.city, 100),
+    billingPostcode: clip(String(billing.postcode || '').replace(/\s+/g, ''), 12),
     paymentMethod: clip(payload.payment_method, 50),
     paymentMethodTitle: clip(payload.payment_method_title, 100),
     transactionId: clip(payload.transaction_id, 255),
@@ -263,7 +267,12 @@ const upsertMirror = (wcOrder, userId, mapped) =>
         currency: wcOrder.currency,
         coupon_codes: wcOrder.couponCodes,
         woocommerce_status: wcOrder.status,
-        woocommerce_modified_at: wcOrder.modifiedAt
+        woocommerce_modified_at: wcOrder.modifiedAt,
+        // GST invoice details (only overwritten when the order carries them)
+        ...(wcOrder.billingStateCode && { billing_state_code: wcOrder.billingStateCode, billing_state: stateName(wcOrder.billingStateCode) }),
+        ...(wcOrder.billingCity && { billing_city: wcOrder.billingCity }),
+        ...(wcOrder.billingPostcode && { billing_postcode: wcOrder.billingPostcode }),
+        ...([wcOrder.firstName, wcOrder.lastName].some(Boolean) && { billing_name: [wcOrder.firstName, wcOrder.lastName].filter(Boolean).join(' ').slice(0, 200) })
       };
       let order = await Order.findOne({ where: { woocommerce_order_id: wcOrder.id }, transaction, lock: transaction.LOCK.UPDATE });
       if (order) {
@@ -456,6 +465,8 @@ export const syncOrder = async (payload, { trigger = 'webhook' } = {}) => {
   await order.update({ sync_note: notes.length ? notes.join(' ').slice(0, 500) : null });
   if (userCreated) await sendAccountSetupEmail(user);
   else if (action === 'enrolled') await sendCourseReadyEmail(user, mapped.map((m) => m.course.title));
+  // GST invoice by email: once per order (a failed attempt is retried on the next sync of the order).
+  if (isPaid) await issueAndSendInvoice(order.id);
 
   log(action, ` lms_order=${order.id} user=${user.id}${userCreated ? '(created)' : ''} courses=${mapped.map((m) => m.course.id).join(',') || '-'}`);
   return { ...summary, action, order_id: order.id, user_id: user.id, user_created: userCreated, course_ids: mapped.map((m) => m.course.id) };

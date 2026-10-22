@@ -102,7 +102,9 @@ export const startScheduler = () => {
   // Live class recordings: Zoom cloud -> Vimeo, once a class has ended and Zoom has processed the recording.
   cron.schedule('*/5 * * * *', safely('live-class-recordings', processPendingRecordings));
   // Re-syncs WooCommerce orders modified since the last run (missed / failed webhooks).
-  cron.schedule('*/10 * * * *', safely('woocommerce-reconcile', reconcileRecentOrders));
+  // Default every 10 minutes; a development copy that WooCommerce cannot push to can set WOOCOMMERCE_RECONCILE_CRON="* * * * *" (every minute).
+  const reconcileCron = cron.validate(process.env.WOOCOMMERCE_RECONCILE_CRON || '') ? process.env.WOOCOMMERCE_RECONCILE_CRON : '*/10 * * * *';
+  cron.schedule(reconcileCron, safely('woocommerce-reconcile', reconcileRecentOrders));
   // Course price / publish status from linked store products (backs up the product webhook).
   cron.schedule('40 * * * *', safely('woocommerce-product-sync', syncCoursesFromStore));
   safely('storage-check', warnIfLocalStorageInProduction)();

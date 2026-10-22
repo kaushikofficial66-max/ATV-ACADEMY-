@@ -3,7 +3,7 @@ const nextConfig = {
   reactCompiler: true,
 
   // Lets the dev server be opened from a phone on the same Wi-Fi (http://192.168.1.6:3000).
-  allowedDevOrigins: ['192.168.1.6'],
+  allowedDevOrigins: ['192.168.1.14'],
 
   // This site is the learners' portal: customers arrive from the password email, so there is no
   // public marketing site. The old public URLs all lead to the login page.

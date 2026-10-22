@@ -14,7 +14,7 @@ import path from 'path';
 import { connectDB, sequelize } from './config/database.js';
 import { swaggerUi, swaggerSpec, swaggerUiOptions } from './config/swagger.js';
 import apiRoutes from './routes/index.js';
-import { razorpayWebhook, woocommerceWebhook, atvSiteWebhook } from './controllers/webhookController.js';
+import { razorpayWebhook, woocommerceWebhook, atvSiteWebhook, atvSitePoke } from './controllers/webhookController.js';
 import { notFoundHandler, errorHandler } from './middlewares/errorHandler.js';
 import { UPLOAD_ROOT } from './middlewares/upload.js';
 import { initSocket } from './services/socketService.js';
@@ -65,6 +65,8 @@ app.post('/api/v1/webhooks/razorpay', express.raw({ type: '*/*', limit: '1mb' })
 app.post('/api/v1/webhooks/woocommerce', express.raw({ type: '*/*', limit: '2mb' }), woocommerceWebhook);
 // Paid orders pushed by the antarikshtv.com checkout (HMAC-signed, raw body).
 app.post('/api/v1/webhooks/atv-site', express.raw({ type: '*/*', limit: '1mb' }), atvSiteWebhook);
+// Instant sync: the website tells the LMS "order N was just paid" (HMAC-signed, same secret as atv-site).
+app.post('/api/v1/webhooks/atv-site/poke', express.raw({ type: '*/*', limit: '16kb' }), atvSitePoke);
 
 // Compression is skipped for video streams (range responses).
 app.use(compression({ filter: (req, res) => !req.path.includes('/media/videos/') && compression.filter(req, res) }));

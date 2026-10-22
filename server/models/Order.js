@@ -76,6 +76,15 @@ Order.init(
       type: DataTypes.DATE,
       allowNull: true
     },
+    // Billing details from the checkout (GST invoice) and the invoice itself.
+    billing_name: { type: DataTypes.STRING(200), allowNull: true },
+    billing_state: { type: DataTypes.STRING(100), allowNull: true },
+    billing_state_code: { type: DataTypes.STRING(5), allowNull: true },
+    billing_city: { type: DataTypes.STRING(100), allowNull: true },
+    billing_postcode: { type: DataTypes.STRING(12), allowNull: true },
+    invoice_number: { type: DataTypes.STRING(40), allowNull: true, unique: true },
+    invoice_issued_at: { type: DataTypes.DATE, allowNull: true },
+    invoice_sent_at: { type: DataTypes.DATE, allowNull: true },
     sync_note: {
       type: DataTypes.STRING(500),
       allowNull: true

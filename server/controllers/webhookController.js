@@ -3,7 +3,7 @@ import ApiError from '../utils/ApiError.js';
 import { verifyWebhookSignature } from '../services/paymentService.js';
 import { fulfillOrder, markPaymentFailed, applyOrderRefund } from '../services/orderService.js';
 import { verifyWebhookSignature as verifyWooSignature, isTrustedSource } from '../services/woocommerceService.js';
-import { syncOrder, syncDeletedOrder } from '../services/woocommerceSyncService.js';
+import { syncOrder, syncDeletedOrder, syncOrderById } from '../services/woocommerceSyncService.js';
 import { applyProductToCourse, markProductDeleted } from '../services/woocommerceProductService.js';
 import { verifySiteSignature, syncSiteOrder } from '../services/atvSiteSyncService.js';
 
@@ -26,6 +26,27 @@ export const atvSiteWebhook = async (req, res) => {
     throw ApiError.badRequest('Malformed JSON body.');
   }
   const result = await syncSiteOrder(payload, { trigger: 'webhook' });
+  return res.status(200).json({ success: true, result });
+};
+
+/**
+ * POST /webhooks/atv-site/poke   body: { "order_id": 123 }
+ * "Instant sync": the antarikshtv.com plugin calls this the moment WooCommerce marks an order paid, so the student
+ * gets the account / invoice emails right away instead of waiting for WooCommerce's queued webhook or the 10-minute
+ * catch-up job (which stay in place as the safety net). The LMS pulls the order from WooCommerce itself, so the
+ * request carries nothing but the id. Signed like /webhooks/atv-site: X-ATV-Signature = hex HMAC-SHA256(raw body,
+ * ATV_SITE_WEBHOOK_SECRET). Idempotent: syncing an order that is already synced changes nothing.
+ */
+export const atvSitePoke = async (req, res) => {
+  const raw = req.body instanceof Buffer ? req.body : Buffer.alloc(0);
+  if (!(await verifySiteSignature(raw, req.headers['x-atv-signature']))) throw ApiError.unauthorized('Invalid signature.');
+  let payload;
+  try {
+    payload = JSON.parse(raw.toString('utf8'));
+  } catch {
+    throw ApiError.badRequest('Malformed JSON body.');
+  }
+  const result = await syncOrderById(payload?.order_id, { trigger: 'poke' });
   return res.status(200).json({ success: true, result });
 };
 

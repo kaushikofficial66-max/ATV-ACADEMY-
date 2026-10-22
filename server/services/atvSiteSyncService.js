@@ -7,6 +7,7 @@ import { getSetting } from './settingsService.js';
 import { fulfillOrder } from './orderService.js';
 import { syncCustomer, sendAccountSetupEmail, sendCourseReadyEmail, normalizeEmail } from './woocommerceSyncService.js';
 import { notifyAdmins } from './notificationService.js';
+import { issueAndSendInvoice } from './invoiceService.js';
 
 /**
  * antarikshtv.com -> LMS. The marketing website takes the Razorpay payment
@@ -195,6 +196,8 @@ export const syncSiteOrder = async (payload, { trigger = 'webhook' } = {}) => {
     const buyer = user || (await User.findByPk(order.user_id));
     if (buyer) await sendCourseReadyEmail(buyer, courses.map((c) => c.title));
   }
+
+  await issueAndSendInvoice(order.id);
 
   console.log(`${LOG} order=${site.externalId} enrolled lms_order=${order.id} user=${order.user_id}${userCreated ? '(created)' : ''} courses=${site.courseIds.join(',')}`);
   return { ...summary, action: 'enrolled', order_id: order.id, user_id: order.user_id, user_created: userCreated, course_ids: site.courseIds };
