@@ -2,29 +2,28 @@
 
 import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
-import { BookOpen, GraduationCap, Star, Wallet, ClipboardCheck, Award } from 'lucide-react';
+import { BookOpen, GraduationCap, Star, ClipboardCheck, Award } from 'lucide-react';
 import { get } from '@/lib/api/client';
 import { EP } from '@/lib/api/endpoints';
 import { Button, Card, CardHeader, PageHeader, StatCard } from '@/components/ui';
 import { QueryState, EmptyState } from '@/components/feedback/States';
 import { Loader } from '@/components/feedback/Loader';
 import PendingApprovalsList from '@/features/projects/PendingApprovalsList';
-import { formatDateTime, formatNumber, formatPrice } from '@/lib/utils';
+import { formatDateTime, formatNumber } from '@/lib/utils';
 
 export default function TutorDashboardPage() {
   const query = useQuery({ queryKey: ['tutor', 'dashboard'], queryFn: () => get(EP.tutor.dashboard).then((r) => r.data) });
 
   return (
     <>
-      <PageHeader title="Dashboard" description="Your courses, students and earnings" actions={<Button href="/tutor/courses/new">Create course</Button>} />
+      <PageHeader title="Dashboard" description="Your courses and students" actions={<Button href="/tutor/courses/new">Create course</Button>} />
       <QueryState query={query} loading={<Loader />}>
         {(d) => (
           <div className="space-y-6">
-            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
               <StatCard label="Courses" value={d.overview.total_courses} icon={BookOpen} hint={`${d.overview.published_courses} published`} href="/tutor/courses" />
               <StatCard label="Students" value={formatNumber(d.overview.total_students)} icon={GraduationCap} hint={`${d.overview.completed_enrollments} completed`} href="/tutor/students" />
               <StatCard label="Rating" value={d.overview.average_rating || '-'} icon={Star} hint={`${d.overview.total_reviews} reviews`} href="/tutor/reviews" />
-              <StatCard label="Earnings balance" value={formatPrice(d.earnings_summary.balance)} icon={Wallet} hint={`${formatPrice(d.earnings_summary.total_earnings)} earned`} href="/tutor/earnings" />
             </div>
             <div className="grid gap-4 sm:grid-cols-2">
               <StatCard label="Projects to review" value={d.overview.pending_project_reviews} icon={ClipboardCheck} href="/tutor/submissions" />

@@ -14,7 +14,6 @@ import {
   Bell,
   UserCog,
   GraduationCap,
-  Wallet,
   Tags,
   UserCheck,
   CreditCard,
@@ -40,11 +39,7 @@ export const NAVIGATION = {
     { label: 'Live Classes', href: '/student/live-classes', icon: Video },
     { label: 'Projects', href: '/student/projects', icon: FolderUp },
     { label: 'Certificates', href: '/student/certificates', icon: Award },
-    { label: 'Community', href: '/student/community', icon: Users },
-    { section: 'Account' },
-    { label: 'My Purchases', href: '/student/orders', icon: Receipt },
-    { label: 'Notifications', href: '/student/notifications', icon: Bell },
-    { label: 'Profile & password', href: '/student/account', icon: UserCog }
+    { label: 'Community', href: '/student/community', icon: Users }
   ],
   tutor: [
     { label: 'Dashboard', href: '/tutor', icon: LayoutDashboard },
@@ -53,11 +48,7 @@ export const NAVIGATION = {
     { label: 'Students', href: '/tutor/students', icon: GraduationCap },
     { label: 'Live Classes', href: '/tutor/live-classes', icon: Video },
     { label: 'Certificates', href: '/tutor/certificates', icon: Award },
-    { label: 'Reviews', href: '/tutor/reviews', icon: Star },
-    { label: 'Earnings', href: '/tutor/earnings', icon: Wallet },
-    { section: 'Account' },
-    { label: 'Notifications', href: '/tutor/notifications', icon: Bell },
-    { label: 'Account', href: '/tutor/account', icon: UserCog }
+    { label: 'Reviews', href: '/tutor/reviews', icon: Star }
   ],
   admin: [
     { label: 'Dashboard', href: '/admin', icon: LayoutDashboard },
@@ -89,9 +80,25 @@ export const NAVIGATION = {
     { section: 'System' },
     { label: 'Reports', href: '/admin/reports', icon: FileBarChart },
     { label: 'Website (CMS)', href: '/admin/cms', icon: FileText },
-    { label: 'Settings', href: '/admin/settings', icon: Settings },
-    { label: 'Account', href: '/admin/account', icon: ShieldCheck }
+    { label: 'Settings', href: '/admin/settings', icon: Settings }
   ]
+};
+
+/**
+ * The list under the profile menu (top-right of the header): account pages per role, followed by "Log out"
+ * which the menu adds itself. These used to be an "Account" section at the bottom of the sidebar.
+ */
+export const ACCOUNT_MENU = {
+  student: [
+    { label: 'My Purchases', href: '/student/orders', icon: Receipt },
+    { label: 'Notifications', href: '/student/notifications', icon: Bell },
+    { label: 'Profile & password', href: '/student/account', icon: UserCog }
+  ],
+  tutor: [
+    { label: 'Notifications', href: '/tutor/notifications', icon: Bell },
+    { label: 'Account', href: '/tutor/account', icon: UserCog }
+  ],
+  admin: [{ label: 'Account', href: '/admin/account', icon: ShieldCheck }]
 };
 
 /**
